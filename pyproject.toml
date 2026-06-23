@@ -27,3 +27,9 @@ dev = [
 
 [project.scripts]
 meshplanner = "meshplanner.cli.app:cli"
+
+[tool.pytest.ini_options]
+markers = [
+    "network: tests that require internet access to download DEM tiles",
+    "slow: tests that take longer than a few seconds",
+]
