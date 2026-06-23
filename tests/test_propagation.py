@@ -1,5 +1,6 @@
 """Tests for propagation module."""
 
+import numpy as np
 import pytest
 
 from meshplanner.propagation.itm import (
@@ -377,3 +378,217 @@ def test_compute_path_loss_different_params(flat_profile):
     # Higher antenna usually gives less excess loss (not guaranteed for
     # all terrain, but true for flat terrain)
     assert r_high["excess_loss_db"] <= r_low["excess_loss_db"] + 1.0
+
+
+# ── Coverage radial sweep tests ──────────────────────────────────
+
+
+def test_coverage_imports():
+    """Verify coverage module exports."""
+    from meshplanner.propagation.coverage import (  # noqa: F811
+        _radial_points,
+        compute_coverage_area,
+        compute_coverage_at_threshold,
+        compute_coverage_raster,
+    )
+    assert callable(compute_coverage_raster)
+    assert callable(compute_coverage_at_threshold)
+    assert callable(compute_coverage_area)
+    assert callable(_radial_points)
+
+
+def test_radial_points_fixed_angle():
+    """Radial at 0 deg (north) from known point."""
+    from meshplanner.propagation.coverage import _radial_points
+
+    # From Asheville center, go north along 0 deg bearing
+    points = _radial_points(35.6, -82.5, 0.0, max_range_km=1.0, step_km=0.5)
+
+    assert len(points) >= 2
+    # First point should be TX location
+    assert points[0] == (35.6, -82.5, 0.0)
+    # Second point should be north of TX (lat increases)
+    assert points[1][0] > 35.6
+    assert abs(points[1][1] - (-82.5)) < 0.01  # Lon should stay roughly same
+    assert abs(points[1][2] - 0.5) < 0.01
+
+
+def test_radial_points_east_west():
+    """Radial at 90 deg (east) and 270 deg (west)."""
+    from meshplanner.propagation.coverage import _radial_points
+
+    east_points = _radial_points(35.6, -82.5, 90.0, max_range_km=1.0, step_km=0.5)
+    west_points = _radial_points(35.6, -82.5, 270.0, max_range_km=1.0, step_km=0.5)
+
+    # East: lon increases
+    assert east_points[1][1] > -82.5
+    # West: lon decreases
+    assert west_points[1][1] < -82.5
+
+
+def test_pixel_for_point():
+    """Verify geographic->pixel conversion uses DEM affine."""
+    from rasterio.transform import from_bounds
+
+    from meshplanner.propagation.coverage import _pixel_for_point
+
+    # 10x10 DEM from -82.6 to -82.4 lon, 35.5 to 35.7 lat
+    affine = from_bounds(-82.6, 35.5, -82.4, 35.7, 10, 10)
+
+    col, row = _pixel_for_point(35.6, -82.5, affine)
+    # -82.5 is at 50% of longitude range = col 5
+    # 35.6 is at 50% of latitude range = row 5
+    assert col == 5, f"Expected col=5, got {col}"
+    assert row == 5, f"Expected row=5, got {row}"
+
+
+def test_radial_path_loss_basic():
+    """End-to-end: compute path loss along one radial using synthetic DEM."""
+    from rasterio.transform import from_bounds
+
+    from meshplanner.propagation.coverage import _compute_radial_path_loss
+    from meshplanner.propagation.params import LoraParams
+
+    # 50x50 synthetic DEM with a hill
+    dem = np.zeros((50, 50), dtype=np.float32)
+    # Hill 10 rows south of center, 5 cols east
+    hill_row, hill_col = 35, 30
+    for r in range(hill_row - 3, hill_row + 4):
+        for c in range(hill_col - 3, hill_col + 4):
+            dist = ((r - hill_row) ** 2 + (c - hill_col) ** 2) ** 0.5
+            dem[r, c] = max(0, 150 - dist * 30)
+
+    affine = from_bounds(-82.6, 35.5, -82.4, 35.7, 50, 50)
+    tx_lat, tx_lon = 35.6, -82.5
+    params = LoraParams(frequency_mhz=915.0, spreading_factor=10)
+
+    results = _compute_radial_path_loss(
+        dem, affine, tx_lat, tx_lon, 100.0,
+        45.0, 5.0, 0.5, params,
+    )
+
+    assert len(results) > 0
+    assert all("path_loss_db" in r for r in results)
+    assert all("rssi_dbm" in r for r in results)
+    # Path loss should increase with distance
+    path_losses = [r["path_loss_db"] for r in results if r["distance_km"] > 0]
+    assert all(
+        path_losses[i] <= path_losses[i + 1]
+        for i in range(len(path_losses) - 1)
+    )
+
+
+def test_coverage_at_threshold():
+    """Binary coverage mask from RSSI raster."""
+    from meshplanner.propagation.coverage import compute_coverage_at_threshold
+
+    rssi = np.array([
+        [-80, -90, -100],
+        [-110, -120, -130],
+        [-140, -150, -160],
+    ], dtype=np.float32)
+
+    mask = compute_coverage_at_threshold(rssi, -120.0)
+    assert mask[0, 0]  # -80 >= -120
+    assert not mask[2, 2]  # -160 < -120
+    assert mask[1, 1]  # -120 == threshold, >= includes it
+    assert mask.sum() == 5  # First 5 cells are >= -120
+
+
+def test_coverage_area():
+    """Coverage area calculation."""
+    from rasterio.transform import from_bounds
+
+    from meshplanner.propagation.coverage import compute_coverage_area
+
+    mask = np.ones((10, 10), dtype=bool)  # 100% covered
+    affine = from_bounds(-82.6, 35.5, -82.4, 35.7, 10, 10)
+    meta = {"affine": affine, "crs": "EPSG:4326"}
+
+    area = compute_coverage_area(mask, meta)
+    assert area > 0
+    assert isinstance(area, float)
+    assert area < 500  # 10x10 cells at ~1 km resolution ~= 100 km2
+
+
+def test_estimate_coverage_raster_structure(tmp_path):
+    """Verify compute_coverage_raster returns correct shapes and types."""
+    from rasterio.transform import from_bounds
+
+    from meshplanner.propagation.coverage import (
+        _pixel_for_point,
+        compute_coverage_raster,
+    )
+
+    # Small synthetic DEM (30x30, ~200m pixels)
+    dem = np.zeros((30, 30), dtype=np.float32)
+    dem[10:20, 10:20] = 50.0  # Small hill
+
+    affine = from_bounds(-82.55, 35.55, -82.45, 35.65, 30, 30)
+    meta = {"affine": affine, "crs": "EPSG:4326"}
+
+    tx_lat, tx_lon = 35.60, -82.50  # Near center
+
+    rssi, cov_meta = compute_coverage_raster(
+        dem,
+        meta,
+        tx_lat,
+        tx_lon,
+        max_range_km=3.0,
+        num_radials=36,  # 10 deg spacing for speed
+        step_km=0.2,
+        num_workers=4,
+    )
+
+    assert rssi.shape == dem.shape, f"Shape mismatch: {rssi.shape} vs {dem.shape}"
+    assert rssi.dtype == np.float32
+    assert cov_meta["tx_lat"] == tx_lat
+    assert cov_meta["tx_lon"] == tx_lon
+    assert cov_meta["type"] == "rssi"
+
+    # Some pixels should have valid RSSI near TX
+    tx_col, tx_row = _pixel_for_point(tx_lat, tx_lon, affine)
+    near_tx = rssi[max(0, tx_row - 3): tx_row + 3, max(0, tx_col - 3): tx_col + 3]
+    assert np.any(near_tx > -np.inf), "No RSSI values near TX"
+    # Closer pixels should be better (higher RSSI)
+    nearby_rssi = near_tx[near_tx > -np.inf]
+    assert np.all(nearby_rssi > -150), f"RSSI too low: {nearby_rssi.min():.1f}"
+
+
+def test_compute_coverage_raster_fast_path(tmp_path):
+    """End-to-end coverage raster with minimal settings, fast execution."""
+    from rasterio.transform import from_bounds
+
+    from meshplanner.propagation.coverage import compute_coverage_raster
+    from meshplanner.propagation.params import LoraParams
+
+    # Tiny DEM (10x10, ~1 km pixels)
+    dem = np.zeros((10, 10), dtype=np.float32)
+    dem[4, 4] = 100.0  # Peak at center
+
+    affine = from_bounds(-82.55, 35.55, -82.45, 35.65, 10, 10)
+    meta = {"affine": affine, "crs": "EPSG:4326"}
+
+    params = LoraParams(
+        frequency_mhz=915.0, spreading_factor=10, tx_power_dbm=14
+    )
+
+    rssi, cov_meta = compute_coverage_raster(
+        dem,
+        meta,
+        35.60,
+        -82.50,
+        params=params,
+        max_range_km=2.0,
+        num_radials=12,
+        step_km=0.5,
+        num_workers=2,
+    )
+
+    assert rssi.shape == (10, 10)
+    assert rssi.dtype == np.float32
+    assert np.any(np.isfinite(rssi))
+
+    # At least compute something
+    finite_count = np.sum(np.isfinite(rssi))
+    assert finite_count > 0, "No valid RSSI values computed"
