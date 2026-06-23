@@ -2,6 +2,11 @@
 
 import pytest
 
+from meshplanner.propagation.itm import (
+    compute_path_loss,
+    estimate_loss_from_profile,
+    path_loss_at_fraction,
+)
 from meshplanner.propagation.params import (
     BAND_CENTERS,
     SF_SENSITIVITY,
@@ -227,3 +232,148 @@ def test_estimate_range_zero_path_loss():
     params = LoraParams(spreading_factor=7, tx_power_dbm=-30)
     range_km = estimate_range_km(params)
     assert range_km == 0.0
+
+
+# ── ITM propagation tests ──────────────────────────────────────
+
+
+@pytest.fixture
+def flat_profile():
+    """10 km flat terrain profile at sea level (100 sample points)."""
+    num_points = 100
+    dist_km = 10.0
+    elevations = [0.0] * num_points
+    return elevations, dist_km
+
+
+@pytest.fixture
+def hill_profile():
+    """10 km profile with a 200 m hill in the middle."""
+    num_points = 100
+    dist_km = 10.0
+    elevations = [0.0] * num_points
+    for i in range(40, 61):
+        if i <= 50:
+            offset = (i - 40) / 10.0
+        else:
+            offset = (60 - i) / 10.0
+        elevations[i] = 200.0 * offset
+    return elevations, dist_km
+
+
+def test_propagation_imports_itm():
+    """Verify the itm module exports all expected symbols."""
+    from meshplanner.propagation.itm import (
+        CLIMATES,
+        compute_path_loss,
+        estimate_loss_from_profile,
+        path_loss_at_fraction,
+    )
+    assert isinstance(CLIMATES, dict)
+    assert "continental_temperate" in CLIMATES
+    assert callable(compute_path_loss)
+    assert callable(estimate_loss_from_profile)
+    assert callable(path_loss_at_fraction)
+
+
+def test_build_prop(flat_profile):
+    """Verify prop dict structure built from elevations."""
+    from meshplanner.propagation.itm import _build_prop
+
+    elevations, dist_km = flat_profile
+    prop = _build_prop(elevations, dist_km)
+
+    # Core fields
+    assert prop["pfl"][0] == len(elevations) - 1  # num_segments
+    assert prop["pfl"][1] == pytest.approx(
+        (dist_km * 1000.0) / (len(elevations) - 1)
+    )
+    assert len(prop["pfl"]) == len(elevations) + 2  # header + elevations
+    assert prop["hg"] == [10.0, 1.5]
+    assert prop["fmhz"] == 915.0
+    assert prop["d"] == dist_km
+
+    # Derived fields
+    assert "wn" in prop
+    assert "gme" in prop
+    assert "zgnd" in prop
+    assert prop["mdvarx"] == 11
+    assert prop["klim"] == 5
+
+
+def test_compute_path_loss_free_space(flat_profile):
+    """Flat terrain path loss should be close to free space (excess small)."""
+    elevations, dist_km = flat_profile
+    result = compute_path_loss(elevations, dist_km)
+
+    assert result["distance_km"] == dist_km
+    assert result["frequency_mhz"] == 915.0
+    assert result["free_space_loss_db"] == pytest.approx(111.7, abs=0.1)
+    # Flat terrain: excess loss should be reasonable (20-40 dB range)
+    assert 20 < result["excess_loss_db"] < 40
+    # Total should be roughly free-space + small excess
+    assert result["path_loss_db"] > result["free_space_loss_db"]
+
+
+def test_compute_path_loss_mountain(hill_profile):
+    """A large hill should produce significantly more loss than flat terrain."""
+    flat_el, flat_dist = [0.0] * 100, 10.0
+    flat_result = compute_path_loss(flat_el, flat_dist)
+
+    hill_el, hill_dist = hill_profile
+    hill_result = compute_path_loss(hill_el, hill_dist)
+
+    assert hill_result["excess_loss_db"] > flat_result["excess_loss_db"] + 20
+    assert hill_result["path_loss_db"] > flat_result["path_loss_db"] + 20
+
+
+def test_compute_path_loss_zero_distance(flat_profile):
+    """Zero distance should return free-space loss of 0 dB."""
+    elevations, _ = flat_profile
+    result = compute_path_loss(elevations, 0.0)
+    assert result["free_space_loss_db"] == 0.0
+    # Zero distance is degenerate; just verify it doesn't crash
+    assert isinstance(result["path_loss_db"], float)
+
+
+def test_path_loss_at_fraction_median(flat_profile):
+    """fraction=0.5 should match the median from compute_path_loss."""
+    elevations, dist_km = flat_profile
+    median = path_loss_at_fraction(elevations, dist_km, fraction=0.5)
+    full = compute_path_loss(elevations, dist_km)
+    assert median == full["path_loss_db"]
+
+
+def test_path_loss_at_fraction_extreme(flat_profile):
+    """Lower quantiles (e.g., 0.1) should give less loss than higher (0.9)."""
+    elevations, dist_km = flat_profile
+    low = path_loss_at_fraction(elevations, dist_km, fraction=0.1)
+    high = path_loss_at_fraction(elevations, dist_km, fraction=0.9)
+    assert low < high
+
+
+def test_estimate_loss_from_profile(flat_profile):
+    """Convenience function should match direct compute_path_loss."""
+    elevations, dist_km = flat_profile
+    profile = {"elevations": elevations, "total_distance_km": dist_km}
+    result = estimate_loss_from_profile(profile)
+    direct = compute_path_loss(elevations, dist_km)
+    assert result["path_loss_db"] == direct["path_loss_db"]
+    assert result["free_space_loss_db"] == direct["free_space_loss_db"]
+
+
+def test_compute_path_loss_different_params(flat_profile):
+    """Varying frequency / height should change loss as expected."""
+    elevations, dist_km = flat_profile
+
+    # Higher frequency -> higher free-space loss
+    r1 = compute_path_loss(elevations, dist_km, frequency_mhz=915.0)
+    r2 = compute_path_loss(elevations, dist_km, frequency_mhz=2400.0)
+    assert r2["free_space_loss_db"] > r1["free_space_loss_db"]
+
+    # Higher TX antenna -> generally less loss (better clearance)
+    r_low = compute_path_loss(elevations, dist_km, tx_height_m=5.0)
+    r_high = compute_path_loss(elevations, dist_km, tx_height_m=50.0)
+    # Higher antenna usually gives less excess loss (not guaranteed for
+    # all terrain, but true for flat terrain)
+    assert r_high["excess_loss_db"] <= r_low["excess_loss_db"] + 1.0
