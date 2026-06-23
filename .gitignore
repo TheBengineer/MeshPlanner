@@ -266,4 +266,7 @@ packages/react-devtools-extensions/.tempUserDataDir
 packages/react-devtools-fusebox/dist
 packages/react-devtools-inline/dist
 packages/react-devtools-shell/dist
+# MeshPlanner
+data/dem_cache/
+
 packages/react-devtools-timeline/dist
