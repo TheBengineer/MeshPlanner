@@ -2,9 +2,11 @@
 
 from meshplanner.terrain.cache import clear_cache, get_cache_path, get_cache_size, is_cached
 from meshplanner.terrain.fetch import fetch_dem, fetch_dem_raster
+from meshplanner.terrain.profile import extract_profile
 
 __all__ = [
     "clear_cache",
+    "extract_profile",
     "fetch_dem",
     "fetch_dem_raster",
     "get_cache_path",
