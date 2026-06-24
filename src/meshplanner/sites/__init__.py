@@ -7,6 +7,7 @@ from meshplanner.sites.candidate import (
     write_sites_csv,
     write_sites_geojson,
 )
+from meshplanner.sites.osm import fetch_osm_sites
 
 __all__ = [
     "CandidateSite",
@@ -14,4 +15,5 @@ __all__ = [
     "write_sites_csv",
     "read_sites_geojson",
     "write_sites_geojson",
+    "fetch_osm_sites",
 ]
