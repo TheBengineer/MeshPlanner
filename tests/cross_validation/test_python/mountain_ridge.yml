@@ -1,0 +1,6 @@
+distance_km: 20.0
+excess_loss_db: 63.5
+free_space_loss_db: 117.7
+frequency_mhz: 915.0
+path_loss_db: 181.2
+profile: mountain_ridge

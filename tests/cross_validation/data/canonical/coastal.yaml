@@ -1,0 +1,18 @@
+canonical_terrain_profile:
+  version: 1
+  name: coastal
+  terrain_type: coastal
+  description: 8 km from sea level (coast) rising to a 100 m inland hill
+  endpoints: {lat_start: 35.5, lon_start: -82.5, lat_end: 35.55, lon_end: -82.42}
+  propagation_params: {total_distance_km: 8.0, frequency_mhz: 915.0, tx_height_m: 10.0,
+    rx_height_m: 1.5, polarization: 1, climate: 6, ground_permittivity: 20.0, ground_conductivity: 0.005,
+    surface_refractivity: 350.0}
+  expected_loss: {path_loss_db: 163.9, path_loss_tolerance: 3.0, free_space_loss_db: 109.7,
+    free_space_tolerance: 1.0, excess_loss_db: 54.2, excess_loss_tolerance: 3.0}
+  elevations: [0.9, -0.5, 0.9, 0.0, -1.0, -0.3, -0.1, -0.3, -0.4, -0.2, 0.6, 0.9,
+    0.1, 0.5, 1.1, 1.4, 3.5, 4.0, 4.7, 7.1, 6.9, 8.5, 11.0, 13.4, 14.8, 15.8, 17.9,
+    20.4, 21.7, 23.2, 26.9, 28.5, 31.3, 32.5, 36.2, 38.2, 39.4, 42.2, 45.6, 48.5,
+    50.6, 53.1, 55.9, 58.3, 62.6, 65.4, 68.8, 71.3, 74.1, 76.8, 79.9, 83.6, 86.2,
+    89.9, 93.6, 95.8, 82.3, 90.0, 96.1, 98.2, 100.9, 99.0, 95.3, 90.5, 81.4, 73.9,
+    64.0, 54.4, 46.1, 36.6, 30.2, 22.2, 16.4, 13.6, 8.7, 5.7, 3.5, 2.5, 1.8, 1.9,
+    0.8]

@@ -1,0 +1,11 @@
+name = "meshplanner"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "dist"
+
+[env.production]
+routes = [{ pattern = "meshplanner.pages.dev", custom_domain = false }]
+
+[[redirects]]
+from = "/api/tiles/*"
+to = "https://s3.amazonaws.com/elevation-tiles-prod/geotiff/:splat"
+status = 200

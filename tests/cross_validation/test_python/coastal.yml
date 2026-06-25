@@ -1,0 +1,6 @@
+distance_km: 8.0
+excess_loss_db: 54.2
+free_space_loss_db: 109.7
+frequency_mhz: 915.0
+path_loss_db: 163.9
+profile: coastal

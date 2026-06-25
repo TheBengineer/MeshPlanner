@@ -1,0 +1,6 @@
+distance_km: 18.0
+excess_loss_db: 57.9
+free_space_loss_db: 116.8
+frequency_mhz: 915.0
+path_loss_db: 174.7
+profile: double_ridge

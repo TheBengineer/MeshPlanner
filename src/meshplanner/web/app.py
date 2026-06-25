@@ -3,7 +3,13 @@ from __future__ import annotations
 
 import streamlit as st
 
-from meshplanner.web.state import init_all, get_dem, get_sites, get_params
+from meshplanner.web.batch import render_batch_page
+from meshplanner.web.coverage import render_coverage_page
+from meshplanner.web.export import render_export_section
+from meshplanner.web.optimize import render_optimize_page
+from meshplanner.web.params import render_params_form
+from meshplanner.web.state import init_all, reset_results
+from meshplanner.web.upload import render_upload_section
 
 # ── Page config (must be the first Streamlit call) ────────────────────────────
 
@@ -21,18 +27,41 @@ init_all()
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 st.sidebar.title("MeshPlanner")
-st.sidebar.caption(
-    "LoRa Network Site Planner for Disaster Recovery"
-)
+st.sidebar.caption("LoRa Network Site Planner for Disaster Recovery")
 
 # Mode selector
 mode = st.sidebar.radio(
     "Mode",
     options=["coverage", "optimize", "batch"],
-    index=["coverage", "optimize", "batch"].index(getattr(st.session_state, "page", "coverage")),
+    index=["coverage", "optimize", "batch"].index(
+        getattr(st.session_state, "page", "coverage")
+    ),
     key="page",
-    help="coverage: single-transmitter | optimize: site selection | batch: bulk coverage",
+    help=(
+        "coverage: single-transmitter | "
+        "optimize: site selection | "
+        "batch: bulk coverage"
+    ),
 )
+
+st.sidebar.markdown("---")
+
+# Upload section
+render_upload_section()
+
+st.sidebar.markdown("---")
+
+# Parameter form
+params_submitted = render_params_form()
+
+# Reset results when parameters change
+if params_submitted:
+    reset_results()
+
+st.sidebar.markdown("---")
+
+# Export section (shared, shown in sidebar)
+render_export_section()
 
 st.sidebar.markdown("---")
 
@@ -65,38 +94,13 @@ with st.sidebar.expander("About MeshPlanner"):
 st.title("📡 MeshPlanner")
 st.markdown("_LoRa Network Site Planner for Disaster Recovery_")
 
+# Route to the correct page module
 if mode == "coverage":
-    st.header("Single-Site Coverage")
-    st.info("Upload a DEM and candidate sites in the sidebar to begin.")
-
-    dem_array, dem_metadata = get_dem()
-    if dem_array is not None:
-        st.success(f"DEM loaded: {dem_array.shape[0]}×{dem_array.shape[1]} cells")
-
-    sites = get_sites()
-    if sites:
-        st.success(f"{len(sites)} candidate site(s) loaded")
-
+    render_coverage_page()
 elif mode == "optimize":
-    st.header("Site Selection Optimisation")
-    st.info("Upload a DEM and candidate sites, then configure optimisation parameters.")
-
-    dem_array, dem_metadata = get_dem()
-    sites = get_sites()
-
-    if dem_array is not None and sites:
-        params = get_params()
-        st.write(f"**Ready to optimise** — {len(sites)} sites, SF{params.spreading_factor}, {params.frequency_mhz} MHz")
-
+    render_optimize_page()
 elif mode == "batch":
-    st.header("Batch Coverage")
-    st.info("Compute coverage rasters for all candidate sites in parallel.")
-
-    dem_array, dem_metadata = get_dem()
-    sites = get_sites()
-
-    if dem_array is not None and sites:
-        st.write(f"**Ready** — {len(sites)} sites to process")
+    render_batch_page()
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 

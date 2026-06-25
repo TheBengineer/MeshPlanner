@@ -1,0 +1,6 @@
+distance_km: 5.0
+excess_loss_db: 53.4
+free_space_loss_db: 105.7
+frequency_mhz: 915.0
+path_loss_db: 159.1
+profile: urban

@@ -1,0 +1,33 @@
+services:
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: meshplanner:latest
+    container_name: meshplanner-web
+    command: ["web"]
+    ports:
+      - "8501:8501"
+    environment:
+      - STREAMLIT_PORT=8501
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: meshplanner:latest
+    container_name: meshplanner-cli
+    entrypoint: ["python", "/app/entrypoint.py"]
+    command: ["cli", "--help"]
+    profiles:
+      - cli-only
+    # ── Usage ──────────────────────────────────────────────────────────
+    # docker compose run --rm cli coverage --west ... (etc.)
+    # docker compose run --rm cli optimize --sites ... (etc.)

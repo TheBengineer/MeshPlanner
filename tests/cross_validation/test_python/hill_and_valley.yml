@@ -1,0 +1,6 @@
+distance_km: 12.0
+excess_loss_db: 49.9
+free_space_loss_db: 113.3
+frequency_mhz: 915.0
+path_loss_db: 163.1
+profile: hill_and_valley

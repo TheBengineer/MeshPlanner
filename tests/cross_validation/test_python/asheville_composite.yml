@@ -1,0 +1,6 @@
+distance_km: 25.0
+excess_loss_db: 75.8
+free_space_loss_db: 119.6
+frequency_mhz: 915.0
+path_loss_db: 195.5
+profile: asheville_composite

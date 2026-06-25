@@ -1,0 +1,19 @@
+canonical_terrain_profile:
+  version: 1
+  name: urban
+  terrain_type: urban
+  description: 5 km urban canyon with buildings modelled as terrain bumps (10-50 m)
+  endpoints: {lat_start: 35.6, lon_start: -82.5, lat_end: 35.61, lon_end: -82.45}
+  propagation_params: {total_distance_km: 5.0, frequency_mhz: 915.0, tx_height_m: 15.0,
+    rx_height_m: 1.5, polarization: 1, climate: 5, ground_permittivity: 5.0, ground_conductivity: 0.001,
+    surface_refractivity: 314.0}
+  expected_loss: {path_loss_db: 159.1, path_loss_tolerance: 3.0, free_space_loss_db: 105.7,
+    free_space_tolerance: 1.0, excess_loss_db: 53.4, excess_loss_tolerance: 3.0}
+  elevations: [78.2, 4.5, 17.7, 5.3, 5.6, 27.5, 52.1, 19.3, 4.2, 34.9, 4.4, 40.3,
+    21.2, 5.3, 4.8, 45.7, 46.6, 5.0, 46.2, 5.9, 66.4, 48.9, 32.9, 50.5, 5.2, 4.5,
+    5.7, 65.5, 5.2, 4.5, 5.4, 17.7, 66.9, 4.9, 31.9, 72.4, 5.0, 4.1, 5.1, 43.8, 4.4,
+    5.5, 31.7, 75.4, 48.6, 5.8, 4.6, 5.1, 87.6, 4.2, 5.7, 48.8, 5.9, 32.1, 4.1, 5.1,
+    41.9, 5.3, 69.3, 43.1, 39.4, 98.0, 4.6, 35.8, 112.6, 4.1, 5.9, 25.8, 51.6, 53.7,
+    4.6, 5.2, 54.4, 31.8, 5.3, 47.0, 55.9, 18.0, 51.4, 5.8, 5.4, 40.4, 79.4, 43.2,
+    5.1, 4.6, 5.4, 46.0, 34.6, 4.6, 4.3, 29.7, 4.6, 51.7, 5.5, 33.9, 5.3, 68.3, 73.3,
+    5.2, 57.6]

@@ -1,0 +1,46 @@
+# Python
+.venv/
+__pycache__/
+*.py[codz]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Version control
+.git/
+.gitignore
+
+# Agent/IDE
+.omo/
+.opencode/
+.idea/
+.vscode/
+
+# Frontend app (separate Node.js project, not needed here)
+meshplanner-app/
+
+# Node (in case of monorepo bind)
+node_modules/
+
+# Docker (prevent re-sending sentinel)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Tests (not needed at runtime)
+tests/
+.pytest_cache/
+.ruff_cache/
+
+# Data caches
+data/
+
+# Docs
+README.md
+
+# OS
+.DS_STORE
+*.swp
+*.swo
