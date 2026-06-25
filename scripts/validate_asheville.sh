@@ -96,7 +96,6 @@ if [[ "$SKIP_PREDICTION" == "false" ]]; then
     PREDICTION_CMD="python3 -c \"
 from meshplanner.terrain.fetch import fetch_dem_raster
 from meshplanner.propagation.coverage import compute_coverage_raster
-from meshplanner import propagate
 
 # Fetch DEM for Asheville area
 dem, meta = fetch_dem_raster({
