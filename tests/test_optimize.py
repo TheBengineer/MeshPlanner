@@ -5,6 +5,7 @@ import pytest
 from scipy.sparse import csr_matrix
 
 from meshplanner.optimize import build_coverage_matrix
+from meshplanner.optimize.greedy import greedy_max_coverage, greedy_min_sites
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -360,3 +361,285 @@ class TestBuildCoverageMatrixEdgeCases:
         M, names, n_cells = build_coverage_matrix(rasters)
         assert M.shape == (50, 100)
         assert M.nnz == 50  # each site covers exactly 1 cell
+
+
+# ---------------------------------------------------------------------------
+# Helpers for greedy tests
+# ---------------------------------------------------------------------------
+
+
+def _make_csr(site_cells: list[list[int]], n_cells: int) -> csr_matrix:
+    """Build a binary CSR matrix from explicit per-site column lists."""
+    rows: list[int] = []
+    cols: list[int] = []
+    for site_idx, cells in enumerate(site_cells):
+        rows.extend([site_idx] * len(cells))
+        cols.extend(cells)
+    data = np.ones(len(rows), dtype=np.float64)
+    return csr_matrix(
+        (data, (rows, cols)), shape=(len(site_cells), n_cells), dtype=np.float64
+    )
+
+
+# ---------------------------------------------------------------------------
+# Greedy — greedy_min_sites
+# ---------------------------------------------------------------------------
+
+
+class TestGreedyMinSites:
+    """Tests for greedy_min_sites (set-cover style)."""
+
+    # Coverage matrix (deterministic, no ties):
+    #   4 sites, 12 cells
+    #   A: {0,1,2,3,4}     (5 cells)
+    #   B: {2,3,4,5,6,7}   (6 cells)
+    #   C: {6,7,8}         (3 cells)
+    #   D: {9,10,11}       (3 cells)
+    #
+    # Greedy order: B → D → A → C
+    #   After B: 6/12 = 0.500
+    #   After D: 9/12 = 0.750
+    #   After A: 11/12 = 0.917
+    #   After C: 12/12 = 1.000
+
+    _N_CELLS = 12
+    _SITE_NAMES = ["Alpha", "Bravo", "Charlie", "Delta"]
+    _COVERAGE = _make_csr(
+        [
+            [0, 1, 2, 3, 4],        # Alpha
+            [2, 3, 4, 5, 6, 7],     # Bravo
+            [6, 7, 8],              # Charlie
+            [9, 10, 11],            # Delta
+        ],
+        _N_CELLS,
+    )
+
+    def test_return_structure(self):
+        """Return dict has expected keys and types."""
+        result = greedy_min_sites(self._COVERAGE, self._SITE_NAMES, 0.5)
+        assert isinstance(result, dict)
+        assert "selected_sites" in result
+        assert "covered_fraction" in result
+        assert "iterations" in result
+        assert isinstance(result["selected_sites"], list)
+        assert isinstance(result["covered_fraction"], float)
+        assert isinstance(result["iterations"], int)
+
+    def test_target_50_pct(self):
+        """target=0.50 selects Bravo alone (6/12 = 0.5)."""
+        result = greedy_min_sites(self._COVERAGE, self._SITE_NAMES, 0.50)
+        assert result["selected_sites"] == ["Bravo"]
+        assert result["covered_fraction"] == 0.5
+        assert result["iterations"] == 1
+
+    def test_target_75_pct(self):
+        """target=0.75 selects Bravo + Delta (9/12 = 0.75)."""
+        result = greedy_min_sites(self._COVERAGE, self._SITE_NAMES, 0.75)
+        assert result["selected_sites"] == ["Bravo", "Delta"]
+        assert result["covered_fraction"] == 0.75
+        assert result["iterations"] == 2
+
+    def test_target_100_pct(self):
+        """target=1.0 selects all 4 sites."""
+        result = greedy_min_sites(self._COVERAGE, self._SITE_NAMES, 1.0)
+        assert result["selected_sites"] == ["Bravo", "Delta", "Alpha", "Charlie"]
+        assert result["covered_fraction"] == 1.0
+        assert result["iterations"] == 4
+
+    def test_target_zero(self):
+        """target <= 0 returns empty selection."""
+        result = greedy_min_sites(self._COVERAGE, self._SITE_NAMES, 0.0)
+        assert result["selected_sites"] == []
+        assert result["covered_fraction"] == 0.0
+        assert result["iterations"] == 0
+
+    def test_target_negative(self):
+        """Negative target returns empty selection."""
+        result = greedy_min_sites(self._COVERAGE, self._SITE_NAMES, -0.1)
+        assert result["selected_sites"] == []
+        assert result["covered_fraction"] == 0.0
+        assert result["iterations"] == 0
+
+    def test_target_above_1(self):
+        """target > 1 is clamped to 1.0."""
+        result = greedy_min_sites(self._COVERAGE, self._SITE_NAMES, 1.5)
+        assert result["iterations"] == 4
+        assert result["covered_fraction"] == 1.0
+
+    def test_no_coverage_matrix(self):
+        """All-inf rasters → no cells covered → empty result."""
+        M = _make_csr([[], [], []], 10)
+        names = ["X", "Y", "Z"]
+        result = greedy_min_sites(M, names, 0.95)
+        assert result["selected_sites"] == []
+        assert result["covered_fraction"] == 0.0
+        assert result["iterations"] == 0
+
+    def test_empty_site_list(self):
+        """Empty coverage matrix (0 sites) returns empty result."""
+        M = csr_matrix((0, 10), dtype=np.float64)
+        result = greedy_min_sites(M, [], 0.95)
+        assert result["selected_sites"] == []
+        assert result["covered_fraction"] == 0.0
+        assert result["iterations"] == 0
+
+    def test_site_covers_everything(self):
+        """Single site covering all cells → selected in one iteration."""
+        M = _make_csr([list(range(20))], 20)
+        result = greedy_min_sites(M, ["Omni"], 0.95)
+        assert result["selected_sites"] == ["Omni"]
+        assert result["covered_fraction"] == 1.0
+        assert result["iterations"] == 1
+
+    def test_target_exceeds_achievable(self):
+        """Target higher than what all sites together can achieve → exhaust all."""
+        # Two sites, 10 cells, each covers 3 disjoint cells → max 6/10 = 0.6
+        M = _make_csr([[0, 1, 2], [3, 4, 5]], 10)
+        result = greedy_min_sites(M, ["A", "B"], 0.9)
+        assert result["selected_sites"] == ["A", "B"]
+        assert result["covered_fraction"] == 0.6
+        assert result["iterations"] == 2
+
+    def test_all_sites_identical(self):
+        """All sites cover the same cells → first one selected is enough."""
+        M = _make_csr([[0, 1, 2], [0, 1, 2], [0, 1, 2]], 10)
+        result = greedy_min_sites(M, ["A", "B", "C"], 0.5)
+        assert result["selected_sites"] == ["A"]
+        assert result["covered_fraction"] == 0.3
+        assert result["iterations"] == 1
+
+    def test_selection_order_by_gain(self):
+        """Sites are selected in decreasing-gain order, not arbitrary."""
+        # A covers 2, B covers 1, C covers 5, D covers 3
+        M = _make_csr([[0, 1], [2], [3, 4, 5, 6, 7], [8, 9, 10]], 11)
+        names = ["SmallA", "SmallB", "LargeC", "MediumD"]
+        result = greedy_min_sites(M, names, 1.0)
+        assert result["selected_sites"][0] == "LargeC"  # gain 5
+        assert result["selected_sites"][1] == "MediumD"  # gain 3
+        # SmallA (2) and SmallB (1) in remaining order
+        assert len(result["selected_sites"]) == 4
+
+    def test_partial_overlap_higher_gain_wins(self):
+        """A site with more total cells but significant overlap can be beaten
+        by a smaller site with less overlap."""
+        # A covers cells 0-7 (8 cells)
+        # B covers cells 0-3 (4 cells, all inside A)
+        # C covers cells 8-11 (4 cells, no overlap)
+        M = _make_csr([list(range(8)), list(range(4)), [8, 9, 10, 11]], 12)
+        names = ["Big", "Subset", "Disjoint"]
+        # Round 1: Big=8, Subset=4, Disjoint=4 → Big wins
+        result = greedy_min_sites(M, names, 0.5)
+        assert result["selected_sites"][0] == "Big"
+        assert result["covered_fraction"] == 8 / 12
+
+
+# ---------------------------------------------------------------------------
+# Greedy — greedy_max_coverage
+# ---------------------------------------------------------------------------
+
+
+class TestGreedyMaxCoverage:
+    """Tests for greedy_max_coverage (pick exactly N sites)."""
+
+    _N_CELLS = 12
+    _SITE_NAMES = ["Alpha", "Bravo", "Charlie", "Delta"]
+    _COVERAGE = _make_csr(
+        [
+            [0, 1, 2, 3, 4],        # Alpha (5)
+            [2, 3, 4, 5, 6, 7],     # Bravo (6)
+            [6, 7, 8],              # Charlie (3)
+            [9, 10, 11],            # Delta (3)
+        ],
+        _N_CELLS,
+    )
+
+    def test_return_structure(self):
+        """Return dict has expected keys and types."""
+        result = greedy_max_coverage(self._COVERAGE, self._SITE_NAMES, 1)
+        assert isinstance(result, dict)
+        assert "selected_sites" in result
+        assert "covered_fraction" in result
+        assert "iterations" in result
+
+    def test_pick_one_site(self):
+        """Best single site is Bravo (covers 6 cells)."""
+        result = greedy_max_coverage(self._COVERAGE, self._SITE_NAMES, 1)
+        assert result["selected_sites"] == ["Bravo"]
+        assert result["covered_fraction"] == 0.5
+        assert result["iterations"] == 1
+
+    def test_pick_two_sites(self):
+        """Best two sites are Bravo + Delta (9 cells)."""
+        result = greedy_max_coverage(self._COVERAGE, self._SITE_NAMES, 2)
+        assert result["selected_sites"] == ["Bravo", "Delta"]
+        assert result["covered_fraction"] == 0.75
+        assert result["iterations"] == 2
+
+    def test_pick_three_sites(self):
+        """Best three sites are Bravo + Delta + Alpha (11 cells)."""
+        result = greedy_max_coverage(self._COVERAGE, self._SITE_NAMES, 3)
+        assert result["selected_sites"] == ["Bravo", "Delta", "Alpha"]
+        assert result["covered_fraction"] == 11 / 12
+        assert result["iterations"] == 3
+
+    def test_pick_all_sites_explicit(self):
+        """n_sites = N_sites returns all sites."""
+        result = greedy_max_coverage(self._COVERAGE, self._SITE_NAMES, 4)
+        assert len(result["selected_sites"]) == 4
+        assert result["covered_fraction"] == 1.0
+        assert result["iterations"] == 4
+
+    def test_pick_more_than_available(self):
+        """n_sites > N_sites returns all sites."""
+        result = greedy_max_coverage(self._COVERAGE, self._SITE_NAMES, 10)
+        assert len(result["selected_sites"]) == 4
+        assert result["covered_fraction"] == 1.0
+        assert result["iterations"] == 4
+
+    def test_zero_sites(self):
+        """n_sites = 0 returns empty selection."""
+        result = greedy_max_coverage(self._COVERAGE, self._SITE_NAMES, 0)
+        assert result["selected_sites"] == []
+        assert result["covered_fraction"] == 0.0
+        assert result["iterations"] == 0
+
+    def test_negative_sites(self):
+        """Negative n_sites returns empty selection."""
+        result = greedy_max_coverage(self._COVERAGE, self._SITE_NAMES, -1)
+        assert result["selected_sites"] == []
+        assert result["covered_fraction"] == 0.0
+        assert result["iterations"] == 0
+
+    def test_no_coverage_matrix(self):
+        """No site covers any cell → empty result even when N>0."""
+        M = _make_csr([[], [], []], 10)
+        result = greedy_max_coverage(M, ["X", "Y", "Z"], 2)
+        assert result["selected_sites"] == []
+        assert result["covered_fraction"] == 0.0
+        assert result["iterations"] == 0
+
+    def test_empty_site_list(self):
+        """Empty matrix returns empty result."""
+        M = csr_matrix((0, 10), dtype=np.float64)
+        result = greedy_max_coverage(M, [], 3)
+        assert result["selected_sites"] == []
+        assert result["covered_fraction"] == 0.0
+        assert result["iterations"] == 0
+
+    def test_exact_union_with_duplicates(self):
+        """n_sites >= n_available returns all sites per shortcut (spec)."""
+        M = _make_csr([[0, 1], [0, 1], [2, 3]], 10)
+        names = ["X", "Y", "Z"]
+        result = greedy_max_coverage(M, names, 3)
+        # n_sites (3) >= n_available (3) → shortcut returns all sites
+        assert result["selected_sites"] == ["X", "Y", "Z"]
+        assert result["covered_fraction"] == 0.4
+        assert result["iterations"] == 3
+
+    def test_disjoint_sites(self):
+        """Completely disjoint sites each contribute fully."""
+        M = _make_csr([[0, 1], [2, 3], [4, 5]], 6)
+        result = greedy_max_coverage(M, ["A", "B", "C"], 2)
+        # All gains are 2; pick first two
+        assert result["covered_fraction"] == 4 / 6
+        assert result["iterations"] == 2
