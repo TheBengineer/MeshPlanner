@@ -25,7 +25,7 @@ export function BboxSelector({ onBboxChange, initialBbox }: BboxSelectorProps) {
   }
 
   return (
-    <div
+    <div data-testid="bbox-selector"
       style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
@@ -35,21 +35,21 @@ export function BboxSelector({ onBboxChange, initialBbox }: BboxSelectorProps) {
     >
       <label>
         West
-        <input value={west} onChange={(e) => setWest(e.target.value)} size={8} />
+        <input data-testid="bbox-west" value={west} onChange={(e) => setWest(e.target.value)} size={8} />
       </label>
       <label>
         South
-        <input value={south} onChange={(e) => setSouth(e.target.value)} size={8} />
+        <input data-testid="bbox-south" value={south} onChange={(e) => setSouth(e.target.value)} size={8} />
       </label>
       <label>
         East
-        <input value={east} onChange={(e) => setEast(e.target.value)} size={8} />
+        <input data-testid="bbox-east" value={east} onChange={(e) => setEast(e.target.value)} size={8} />
       </label>
       <label>
         North
-        <input value={north} onChange={(e) => setNorth(e.target.value)} size={8} />
+        <input data-testid="bbox-north" value={north} onChange={(e) => setNorth(e.target.value)} size={8} />
       </label>
-      <button onClick={handleApply} style={{ gridColumn: '1 / -1' }}>
+      <button data-testid="bbox-apply" onClick={handleApply} style={{ gridColumn: '1 / -1' }}>
         Apply
       </button>
     </div>

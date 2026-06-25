@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { MeshMap } from '@/components/map/MeshMap'
 import { BboxSelector } from '@/components/map/BboxSelector'
 import { SiteList } from '@/components/sidebar/SiteList'
@@ -13,6 +13,7 @@ import type { Bbox, CandidateSite, LoraParams } from '@/lib/types'
 
 export default function App() {
   const [mode, setMode] = useState<'coverage' | 'optimize' | 'batch'>('coverage')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const {
     sites, addSite, removeSite, clearSites,
     setBbox, toggleSiteSelection, selectedSiteNames,
@@ -23,20 +24,48 @@ export default function App() {
     try {
       const parsed = filename.endsWith('.csv') ? parseSitesCsv(content) : parseSitesGeoJson(content)
       for (const site of parsed) addSite(site)
-    } catch (e) { console.error('Failed to parse sites:', e) }
+    } catch (e) {
+      useStore.getState().setError(e instanceof Error ? e.message : 'Failed to parse sites file')
+    }
   }
 
+  const closeSidebar = useCallback(() => setSidebarOpen(false), [])
+
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ width: 320, overflowY: 'auto', borderRight: '1px solid #ddd', background: '#fafafa' }}>
-        <div style={{ padding: 12, borderBottom: '1px solid #ddd' }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>MeshPlanner</h2>
-          <div style={{ fontSize: 11, color: '#888' }}>LoRa Site Planner</div>
+    <div className="app-layout">
+      {/* Hamburger toggle */}
+      <button
+        data-testid="hamburger-toggle"
+        className={`hamburger-toggle${sidebarOpen ? ' hamburger-toggle--open' : ''}`}
+        onClick={() => setSidebarOpen(prev => !prev)}
+        aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+        type="button"
+      >
+        <span className="hamburger-toggle__icon">
+          <span className="hamburger-toggle__bar" />
+          <span className="hamburger-toggle__bar" />
+          <span className="hamburger-toggle__bar" />
+        </span>
+      </button>
+
+      {/* Sidebar overlay (mobile only) */}
+      <div
+        className={`sidebar-overlay${sidebarOpen ? ' sidebar-overlay--visible' : ''}`}
+        onClick={closeSidebar}
+        role="presentation"
+      />
+
+      {/* Sidebar */}
+      <div data-testid="sidebar" className={`sidebar${sidebarOpen ? ' sidebar--open' : ''}`}>
+        <div className="sidebar-header">
+          <h2 data-testid="app-title" style={{ margin: 0, fontSize: 16 }}>MeshPlanner</h2>
+          <p>LoRa Site Planner</p>
         </div>
         
-        <div style={{ padding: 8 }}>
-          <label>Mode
-            <select value={mode} onChange={e => setMode(e.target.value as any)} style={{ width: '100%', marginTop: 4 }}>
+        <div className="sidebar-section" style={{ padding: 8 }}>
+          <label>
+            Mode
+            <select value={mode} onChange={e => setMode(e.target.value as any)} className="form-control--full" style={{ marginTop: 4 }}>
               <option value="coverage">Single Coverage</option>
               <option value="optimize">Optimize</option>
             </select>
@@ -45,7 +74,7 @@ export default function App() {
         
         <BboxSelector onBboxChange={setBbox} />
         
-        <div style={{ borderTop: '1px solid #ddd', padding: 8 }}>
+        <div className="sidebar-section" style={{ padding: 8 }}>
           <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13 }}>Sites</div>
           <SiteForm onAddSite={addSite} />
           <FileUpload onFile={handleFileUpload} label="Upload CSV/GeoJSON" />
@@ -60,7 +89,7 @@ export default function App() {
         }} />
       </div>
       
-      <div style={{ flex: 1, position: 'relative' }}>
+      <div data-testid="map-area" className="map-area">
         <MeshMap
           sites={sites}
           selectedSiteNames={selectedSiteNames}

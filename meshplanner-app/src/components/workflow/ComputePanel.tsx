@@ -4,7 +4,7 @@ import { fetchDemRaster } from "@/lib/dem/fetch"
 import { downloadCsv, downloadGeoJson, rasterToCoverageGeoJson } from "@/lib/export/geojson"
 import { greedyMinSites } from "@/lib/optimize/greedy"
 import { buildCoverageMatrix } from "@/lib/optimize/matrix"
-import { computeCoverageRaster } from "@/lib/propagation/coverage"
+import { computeCoverageWithWorkers } from "@/workers/coverage-manager"
 import type { CoverageRaster } from "@/lib/types"
 import { useStore } from "@/store"
 
@@ -54,7 +54,7 @@ export function ComputePanel() {
       const selectedSites = sites.filter((s) => selectedSiteNames.includes(s.name))
       const rasterMap = new Map<string, CoverageRaster>()
       for (const site of selectedSites) {
-        const raster = computeCoverageRaster(
+        const raster = await computeCoverageWithWorkers(
           dem.data, dem.width, dem.height, demAffine,
           site.latitude, site.longitude,
           params, maxRangeKm, numRadials,
@@ -134,6 +134,7 @@ export function ComputePanel() {
       {/* Compute button */}
       <button
         type="button"
+        data-testid="compute-btn"
         onClick={handleCompute}
         disabled={computing || !bbox || selectedSiteNames.length === 0}
         style={{
@@ -170,7 +171,7 @@ export function ComputePanel() {
 
       {/* Error state */}
       {error && (
-        <div style={{
+        <div data-testid="compute-error" style={{
           marginTop: 8, padding: "6px 8px",
           background: "#fef2f2", color: "#b91c1c",
           borderRadius: 4, fontSize: 12,
@@ -191,7 +192,7 @@ export function ComputePanel() {
 
       {/* Results metrics */}
       {coverageResults && !computing && (
-        <div style={{
+        <div data-testid="coverage-results" style={{
           marginTop: 8, padding: "8px",
           background: "#f0fdf4", borderRadius: 4,
           fontSize: 12,
@@ -245,8 +246,9 @@ export function ComputePanel() {
 
           {/* Export buttons */}
           <div style={{ marginTop: 8, display: "flex", gap: 4 }}>
-          <button
+            <button
             type="button"
+            data-testid="export-geojson-btn"
             onClick={handleExportGeoJson}
               style={{
                 flex: 1, padding: "4px 6px", fontSize: 11,
@@ -258,6 +260,7 @@ export function ComputePanel() {
             </button>
           <button
             type="button"
+            data-testid="export-csv-btn"
             onClick={handleExportCsv}
               style={{
                 flex: 1, padding: "4px 6px", fontSize: 11,

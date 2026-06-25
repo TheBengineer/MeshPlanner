@@ -26,13 +26,91 @@ pip install -e ".[dev]"
 
 ### Dependencies
 
+**Required:**
 - Python ≥ 3.10
 - `numpy`, `scipy` — numerical + sparse matrix operations
 - `rasterio` — GeoTIFF I/O
 - `click` — CLI framework
 - `tqdm` — progress bars
-- `pulp` — ILP solver (CBC bundled)
+- `PuLP` — ILP solver (CBC bundled)
 - `requests` — DEM tile download
+- `shapely` — geospatial geometry
+
+**Optional extras:**
+
+| Install target | Extras |
+|---|---|
+| `pip install meshplanner[web]` | Streamlit web UI (`streamlit`, `folium`, `streamlit-folium`) |
+| `pip install meshplanner[osm]` | OpenStreetMap data (`osmnx`) |
+| `pip install meshplanner[dev]` | Development (`pytest`, `pytest-cov`, `ruff`) |
+
+---
+
+## Docker
+
+### Quick start (Streamlit web UI)
+
+```bash
+docker compose up
+```
+
+Open http://localhost:8501 in your browser. The web UI lets you upload a DEM and candidate sites, configure LoRa parameters, and run coverage / optimisation from a graphical interface.
+
+### Run CLI commands
+
+```bash
+# Single-transmitter coverage
+docker compose run --rm cli coverage \
+  --west -82.65 --south 35.50 \
+  --east -82.45 --north 35.65 \
+  --tx-lat 35.595 --tx-lon -82.555 \
+  --output /app/output
+
+# Site optimisation
+docker compose run --rm cli optimize \
+  --sites /app/tests/data/asheville_sites.csv \
+  --dem /app/asheville_dem.tif \
+  --mode min-sites --target 0.95 \
+  --output /app/output
+```
+
+Inside the container, all output directories are under `/app/` (the container's working directory). Mount a local volume to persist results:
+
+```bash
+docker compose run --rm \
+  -v "$(pwd)/output:/app/output" \
+  cli coverage --west -82.65 --south 35.50 \
+  --east -82.45 --north 35.65 \
+  --tx-lat 35.595 --tx-lon -82.555 \
+  --output /app/output
+```
+
+### Container entrypoint
+
+The `entrypoint.py` router dispatches based on the first argument:
+
+| Command | Behaviour |
+|---|---|
+| `docker run meshplanner` (no args) | Launch Streamlit web UI on port 8501 |
+| `docker run meshplanner web` | Launch Streamlit web UI on port 8501 |
+| `docker run meshplanner cli <args>` | Run the CLI with `<args>` |
+| `docker run meshplanner coverage ...` | Shortcut — runs the CLI directly |
+
+### Build the image manually
+
+```bash
+docker build -t meshplanner .
+docker run --rm -p 8501:8501 meshplanner        # web UI
+docker run --rm meshplanner cli --help           # CLI help
+```
+
+### Docker compose profiles
+
+The `cli` service uses the `cli-only` profile and is excluded from `docker compose up`. Start both services explicitly:
+
+```bash
+docker compose --profile cli-only up
+```
 
 ---
 
@@ -241,6 +319,124 @@ meshplanner export \
   --output ./opt_min/combined_coverage.tif
 ```
 
+### Typical CLI workflows
+
+**Full pipeline — Asheville, NC:**
+
+```bash
+# 1. Batch-process all candidate sites
+meshplanner batch \
+  --sites tests/data/asheville_sites.csv \
+  --dem asheville_dem.tif \
+  --band US915 --sf 10 --tx-power 20 \
+  --workers 8 \
+  --output ./pipeline/batch
+
+# 2. Find the minimum sites for 95% coverage
+meshplanner optimize \
+  --sites tests/data/asheville_sites.csv \
+  --dem asheville_dem.tif \
+  --mode min-sites --target 0.95 \
+  --cell-size 4 --time-limit 120 \
+  --output ./pipeline/opt_min
+
+# 3. Export the selected sites and combined raster
+meshplanner export \
+  --input ./pipeline/opt_min/optimize_results.json \
+  --format geojson \
+  --output ./pipeline/opt_min/sites.geojson
+
+meshplanner export \
+  --input ./pipeline/opt_min/optimize_results.json \
+  --format csv \
+  --output ./pipeline/opt_min/sites.csv
+
+meshplanner export \
+  --input ./pipeline/opt_min/optimize_results.json \
+  --format raster \
+  --output ./pipeline/opt_min/combined.tif
+```
+
+**Max-coverage with fixed budget:**
+
+```bash
+meshplanner optimize \
+  --sites tests/data/asheville_sites.csv \
+  --dem asheville_dem.tif \
+  --mode max-coverage --n-sites 5 \
+  --cell-size 4 --time-limit 60 \
+  --workers 8 \
+  --output ./pipeline/opt_max
+```
+
+**Custom band (EU 868 MHz):**
+
+```bash
+meshplanner coverage \
+  --west -2.0 --south 48.0 --east -1.5 --north 48.5 \
+  --tx-lat 48.2 --tx-lon -1.8 \
+  --band EU868 --sf 12 --tx-power 14 \
+  --max-range 15 --threshold -125 \
+  --output ./europe_coverage
+```
+
+---
+
+## Streamlit Web UI
+
+MeshPlanner includes a browser-based graphical interface built with **Streamlit** and **Folium** for interactive map-based analysis.
+
+**Features:**
+- Upload DEM and candidate sites through the sidebar
+- Configure LoRa parameters (band, SF, TX power, range, threshold)
+- Three modes: single-transmitter coverage, batch processing, and site-selection optimisation
+- Interactive results on a Folium map with per-site RSSI overlay
+- Side-by-side comparison of greedy vs. ILP solver results
+- Export results as CSV right from the browser
+
+### Local deployment
+
+```bash
+# Install with web extras
+pip install "meshplanner[web]"
+
+# Launch the web UI
+streamlit run src/meshplanner/web/app.py
+```
+
+Open http://localhost:8501.
+
+### Docker deployment
+
+```bash
+# Start the web service (recommended)
+docker compose up
+
+# Or build and run manually
+docker build -t meshplanner .
+docker run --rm -p 8501:8501 meshplanner
+```
+
+The web UI is served on port 8501 with a health check endpoint at `/`.
+
+### How it works
+
+The Streamlit app is composed of page modules under `src/meshplanner/web/`:
+
+| Module | Purpose |
+|---|---|
+| `app.py` | Main entry point, sidebar routing, top-level layout |
+| `coverage.py` | Single-transmitter coverage page with Folium map |
+| `batch.py` | Batch processing page with per-site status table |
+| `optimize.py` | Optimisation page with greedy vs. ILP comparison |
+| `upload.py` | DEM and sites file upload widget |
+| `params.py` | LoRa parameter form and accessor helpers |
+| `state.py` | Session state initialisation and management |
+| `map_utils.py` | Folium map rendering helpers |
+| `export.py` | Browser-side results export |
+
+All computation runs on the server using the same `meshplanner` Python API that the CLI uses. The web UI is a thin presentation layer — no separate backend service is needed.
+
 ---
 
 ## Progress Reporting
@@ -289,11 +485,12 @@ paths = export_both(rssi, cov_meta, "output/coverage_stem")
 
 ```
 meshplanner/
-├── cli/              # Click CLI (app.py)
+├── cli/              # Click CLI (4 commands: coverage, batch, optimize, export)
+├── web/              # Streamlit web UI (app.py + 8 page/component modules)
 ├── terrain/          # DEM fetch (SRTM from AWS Open Data), caching, profiles
 ├── propagation/      # ITM radial sweep, coverage rasters, LoRa params
 ├── optimize/         # Greedy + ILP (PuLP) solvers, warm-start heuristics
-├── combine/          # Per-cell union/intersection/redundancy
+├── combine/          # Per-cell union / best-RSSI merge
 ├── export/           # GeoTIFF, GeoJSON, CSV writers
 ├── sites/            # Candidate site model, CSV/GeoJSON I/O
 ├── batch.py          # Parallel multi-site processing

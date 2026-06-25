@@ -88,7 +88,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
         )}
       </div>
       
-      <button onClick={handleApply} style={{ marginTop: 8, width: '100%', padding: '4px 8px' }}>Apply Parameters</button>
+      <button data-testid="apply-params-btn" onClick={handleApply} style={{ marginTop: 8, width: '100%', padding: '4px 8px' }}>Apply Parameters</button>
     </div>
   )
 }

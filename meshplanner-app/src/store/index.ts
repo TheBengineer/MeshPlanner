@@ -169,3 +169,11 @@ export const useStore = create<AppStore>((set, get) => ({
   setOptimizationResult: (r) => set({ optimizationResult: r }),
   setError: (e) => set({ error: e }),
 }))
+
+/* ── Expose store on window for E2E test access ── */
+declare global {
+  interface Window { __STORE__: typeof useStore }
+}
+if (typeof window !== "undefined") {
+  (window as any).__STORE__ = useStore
+}

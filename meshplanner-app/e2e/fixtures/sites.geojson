@@ -1,0 +1,15 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-82.555, 35.595] },
+      "properties": { "name": "Site_A", "elevation_m": 680 }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-82.58, 35.61] },
+      "properties": { "name": "Site_B", "elevation_m": 710 }
+    }
+  ]
+}

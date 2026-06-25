@@ -16,7 +16,7 @@ export default defineConfig({
       targets: [
         {
           src: 'node_modules/highs/build/highs.wasm',
-          dest: 'wasm',
+          dest: 'assets',
         },
       ],
     }),

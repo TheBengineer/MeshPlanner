@@ -12,7 +12,21 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          env: {
+            ...process.env,
+            LD_LIBRARY_PATH: [
+              '/home/bengi/.cache/ms-playwright/chromium-1228/chrome-linux64',
+              process.env.LD_LIBRARY_PATH,
+            ].filter(Boolean).join(':'),
+          },
+        },
+      },
+    },
   ],
   webServer: {
     command: 'npm run build && npm run preview',
