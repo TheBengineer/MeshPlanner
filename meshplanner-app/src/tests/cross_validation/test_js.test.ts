@@ -150,7 +150,7 @@ if (!isVitest) {
   }))
 
   const output = {
-    engine: "js (knife-edge diffraction)",
+    engine: "js (full ITM / Longley-Rice)",
     generated_at: new Date().toISOString(),
     profiles_loaded: profiles.length,
     results: summary,
@@ -194,12 +194,11 @@ if (isVitest) {
       it(`deviation from Python is bounded for ${p.name}`, () => {
         const { result, expected } = runProfile(p)
 
-        // JS simplified model will differ from full ITM, but deviation
-        // should be stable (no worse than 40 dB for complex terrain)
+        // JS full ITM should match Python golden data within 3 dB
         const deviation = Math.abs(
           result.pathLossDb - expected.path_loss_db,
         )
-        expect(deviation).toBeLessThanOrEqual(50)
+        expect(deviation).toBeLessThanOrEqual(3)
       })
     }
   })

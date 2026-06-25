@@ -3,99 +3,99 @@
 exports[`JS ITM cross-validation > computePathLoss output snapshot for asheville_composite 1`] = `
 {
   "distanceKm": 25,
-  "excessLossDb": 34,
+  "excessLossDb": 75.8,
   "freeSpaceLossDb": 119.6,
   "frequencyMhz": 915,
-  "pathLossDb": 153.6,
+  "pathLossDb": 195.5,
 }
 `;
 
 exports[`JS ITM cross-validation > computePathLoss output snapshot for coastal 1`] = `
 {
   "distanceKm": 8,
-  "excessLossDb": 28.3,
+  "excessLossDb": 54.6,
   "freeSpaceLossDb": 109.7,
   "frequencyMhz": 915,
-  "pathLossDb": 138.1,
+  "pathLossDb": 164.3,
 }
 `;
 
 exports[`JS ITM cross-validation > computePathLoss output snapshot for deep_valley 1`] = `
 {
   "distanceKm": 10,
-  "excessLossDb": 0,
+  "excessLossDb": 4.5,
   "freeSpaceLossDb": 111.7,
   "frequencyMhz": 915,
-  "pathLossDb": 111.7,
+  "pathLossDb": 116.2,
 }
 `;
 
 exports[`JS ITM cross-validation > computePathLoss output snapshot for double_ridge 1`] = `
 {
   "distanceKm": 18,
-  "excessLossDb": 29.9,
+  "excessLossDb": 57.9,
   "freeSpaceLossDb": 116.8,
   "frequencyMhz": 915,
-  "pathLossDb": 146.7,
+  "pathLossDb": 174.7,
 }
 `;
 
 exports[`JS ITM cross-validation > computePathLoss output snapshot for flat 1`] = `
 {
   "distanceKm": 10,
-  "excessLossDb": 0,
+  "excessLossDb": 26.5,
   "freeSpaceLossDb": 111.7,
   "frequencyMhz": 915,
-  "pathLossDb": 111.7,
+  "pathLossDb": 138.2,
 }
 `;
 
 exports[`JS ITM cross-validation > computePathLoss output snapshot for hill_and_valley 1`] = `
 {
   "distanceKm": 12,
-  "excessLossDb": 30.8,
+  "excessLossDb": 49.9,
   "freeSpaceLossDb": 113.3,
   "frequencyMhz": 915,
-  "pathLossDb": 144.1,
+  "pathLossDb": 163.1,
 }
 `;
 
 exports[`JS ITM cross-validation > computePathLoss output snapshot for mountain_ridge 1`] = `
 {
   "distanceKm": 20,
-  "excessLossDb": 33,
+  "excessLossDb": 63.5,
   "freeSpaceLossDb": 117.7,
   "frequencyMhz": 915,
-  "pathLossDb": 150.7,
+  "pathLossDb": 181.2,
 }
 `;
 
 exports[`JS ITM cross-validation > computePathLoss output snapshot for rolling_hills 1`] = `
 {
   "distanceKm": 20,
-  "excessLossDb": 18.2,
+  "excessLossDb": 47.2,
   "freeSpaceLossDb": 117.7,
   "frequencyMhz": 915,
-  "pathLossDb": 135.9,
+  "pathLossDb": 164.9,
 }
 `;
 
 exports[`JS ITM cross-validation > computePathLoss output snapshot for single_ridge 1`] = `
 {
   "distanceKm": 15,
-  "excessLossDb": 27.9,
+  "excessLossDb": 53.1,
   "freeSpaceLossDb": 115.2,
   "frequencyMhz": 915,
-  "pathLossDb": 143.1,
+  "pathLossDb": 168.3,
 }
 `;
 
 exports[`JS ITM cross-validation > computePathLoss output snapshot for urban 1`] = `
 {
   "distanceKm": 5,
-  "excessLossDb": 30,
+  "excessLossDb": 53.3,
   "freeSpaceLossDb": 105.7,
   "frequencyMhz": 915,
-  "pathLossDb": 135.7,
+  "pathLossDb": 158.9,
 }
 `;

@@ -1,12 +1,30 @@
 # LoRa Network Site Planner for Disaster Recovery
 
-**MeshPlanner** is a Python CLI tool for planning LoRa mesh network deployments in disaster-affected areas. Given a terrain model and candidate gateway locations, it:
+**MeshPlanner** helps disaster-response teams decide **where to place LoRa gateways** for optimal coverage. Given a terrain model and candidate site locations, it:
 
-- Simulates RF coverage for each site using ITM/Longley-Rice propagation
-- Runs **site-selection optimisation** (minimum sites for X% coverage, or maximum coverage with N sites) via greedy heuristic + ILP with warm-start
-- Exports results as GeoTIFF rasters, GeoJSON, and CSV
+- 📡 **Simulates RF coverage** for each site using ITM/Longley-Rice propagation
+- 🎯 **Optimises site selection** — minimum sites for target coverage, or max coverage with a fixed number of gateways
+- 🗺️ **Exports results** as GeoTIFF rasters, GeoJSON site lists, and CSV summaries
+- 🌐 **Web UI** with interactive map (Streamlit) and offline-first JavaScript SPA
 
-The canonical test case is **Asheville, NC** after Hurricane Helene (September 2024) — mountainous terrain where rapid LoRa deployment can fill critical communications gaps.
+The canonical test case is **Asheville, NC** after Hurricane Helene (2024) — mountainous terrain where LoRa can fill critical communications gaps.
+
+---
+
+## Quick Start (3 commands)
+
+```bash
+# 1. Download a DEM and compute coverage for one transmitter
+meshplanner coverage --west -82.6 --south 35.5 --east -82.4 --north 35.7 --tx-lat 35.6 --tx-lon -82.5
+
+# 2. Optimise: find minimum sites for 95% coverage
+meshplanner optimize --sites tests/data/asheville_sites.csv --dem asheville_dem.tif --mode min-sites --target 0.95
+
+# 3. Export selected sites as GeoJSON
+meshplanner export --input ./output/optimize_results.json --format geojson
+```
+
+**See [CLI Commands](#cli-commands) below for all options.**
 
 ---
 
@@ -436,6 +454,39 @@ The Streamlit app is composed of page modules under `src/meshplanner/web/`:
 | `export.py` | Browser-side results export |
 
 All computation runs on the server using the same `meshplanner` Python API that the CLI uses. The web UI is a thin presentation layer — no separate backend service is needed.
+
+---
+
+## JavaScript SPA (Browser-Only)
+
+MeshPlanner includes an offline-first JavaScript SPA in `meshplanner-app/` that runs **entirely in the browser** — no server needed after initial load.
+
+**Features:**
+- MapLibre GL JS interactive map (free, no API key)
+- DEM fetch from AWS Open Data SRTM tiles (streamed in-browser)
+- Coverage computation via ITM radial sweep with Web Workers
+- Site management (CSV/GeoJSON import, manual add, click-to-place)
+- Greedy optimisation solver (hiGHS WASM for ILP when available)
+- Mobile-responsive layout (375px → desktop)
+- Offline-capable (Service Worker + IndexedDB DEM cache)
+
+### Run locally
+
+```bash
+cd meshplanner-app
+npm install
+npm run dev        # Development server on localhost:5173
+npm run build      # Production build to dist/
+npm run preview    # Preview production build
+```
+
+### Deploy
+
+```bash
+# Static hosting (CloudFlare Pages, S3, Netlify)
+npm run build
+# Upload dist/ to any static host — no server needed
+```
 
 ---
 
