@@ -28,6 +28,11 @@ dev = [
 osm = [
     "osmnx>=1.9",
 ]
+web = [
+    "streamlit>=1.35",
+    "streamlit-folium>=0.18",
+    "folium>=0.16",
+]
 
 [project.scripts]
 meshplanner = "meshplanner.cli.app:cli"
