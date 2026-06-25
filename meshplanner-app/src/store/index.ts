@@ -51,14 +51,24 @@ export type AppMode = "single" | "batch" | "optimize"
 
 export interface UISlice {
   mode: AppMode
+  sidebarOpen: boolean
   computing: boolean
   progress: { current: number; total: number; label: string } | null
   setMode: (mode: AppMode) => void
+  setSidebarOpen: (open: boolean) => void
   setComputing: (v: boolean) => void
   setProgress: (p: { current: number; total: number; label: string } | null) => void
 }
 
 /* ── Results slice ── */
+
+export type OptimizationPhase =
+  | 'idle'
+  | 'computing'
+  | 'greedy'
+  | 'ilp-loading'
+  | 'ilp-complete'
+  | 'error'
 
 export interface CoverageResults {
   coveredFraction: number
@@ -73,9 +83,15 @@ export interface CoverageResults {
 export interface ResultsSlice {
   coverageResults: CoverageResults | null
   optimizationResult: OptimizationResult | null
+  optimizationPhase: OptimizationPhase
+  greedyResult: OptimizationResult | null
+  improvement: number | null
   error: string | null
   setCoverageResults: (r: CoverageResults | null) => void
   setOptimizationResult: (r: OptimizationResult | null) => void
+  setOptimizationPhase: (p: OptimizationPhase) => void
+  setGreedyResult: (r: OptimizationResult | null) => void
+  setImprovement: (i: number | null) => void
   setError: (e: string | null) => void
 }
 
@@ -153,20 +169,28 @@ export const useStore = create<AppStore>((set, get) => ({
 
   /* UI */
   mode: "single",
+  sidebarOpen: window.innerWidth >= 768,
   computing: false,
   progress: null,
 
   setMode: (mode) => set({ mode }),
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setComputing: (v) => set({ computing: v }),
   setProgress: (p) => set({ progress: p }),
 
   /* Results */
   coverageResults: null,
   optimizationResult: null,
+  optimizationPhase: 'idle',
+  greedyResult: null,
+  improvement: null,
   error: null,
 
   setCoverageResults: (r) => set({ coverageResults: r }),
   setOptimizationResult: (r) => set({ optimizationResult: r }),
+  setOptimizationPhase: (p) => set({ optimizationPhase: p }),
+  setGreedyResult: (r) => set({ greedyResult: r }),
+  setImprovement: (i) => set({ improvement: i }),
   setError: (e) => set({ error: e }),
 }))
 

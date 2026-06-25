@@ -25,7 +25,10 @@ export function BboxSelector({ onBboxChange, initialBbox }: BboxSelectorProps) {
   }
 
   return (
-    <div data-testid="bbox-selector"
+    <div
+      data-testid="bbox-selector"
+      role="group"
+      aria-label="Bounding box coordinates"
       style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
@@ -35,21 +38,27 @@ export function BboxSelector({ onBboxChange, initialBbox }: BboxSelectorProps) {
     >
       <label>
         West
-        <input data-testid="bbox-west" value={west} onChange={(e) => setWest(e.target.value)} size={8} />
+        <input data-testid="bbox-west" value={west} onChange={(e) => setWest(e.target.value)} size={8} aria-label="Bounding box west longitude" />
       </label>
       <label>
         South
-        <input data-testid="bbox-south" value={south} onChange={(e) => setSouth(e.target.value)} size={8} />
+        <input data-testid="bbox-south" value={south} onChange={(e) => setSouth(e.target.value)} size={8} aria-label="Bounding box south latitude" />
       </label>
       <label>
         East
-        <input data-testid="bbox-east" value={east} onChange={(e) => setEast(e.target.value)} size={8} />
+        <input data-testid="bbox-east" value={east} onChange={(e) => setEast(e.target.value)} size={8} aria-label="Bounding box east longitude" />
       </label>
       <label>
         North
-        <input data-testid="bbox-north" value={north} onChange={(e) => setNorth(e.target.value)} size={8} />
+        <input data-testid="bbox-north" value={north} onChange={(e) => setNorth(e.target.value)} size={8} aria-label="Bounding box north latitude" />
       </label>
-      <button data-testid="bbox-apply" onClick={handleApply} style={{ gridColumn: '1 / -1' }}>
+      <button
+        data-testid="bbox-apply"
+        onClick={handleApply}
+        aria-label="Apply bounding box"
+        style={{ gridColumn: '1 / -1' }}
+        type="button"
+      >
         Apply
       </button>
     </div>

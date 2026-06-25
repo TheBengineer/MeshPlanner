@@ -17,7 +17,7 @@ export function MapControls({ onResetView, bboxInfo }: MapControlsProps) {
         boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
       }}
     >
-      <button onClick={onResetView}>Reset View</button>
+      <button onClick={onResetView} aria-label="Reset map view to default extent" type="button">Reset View</button>
       {bboxInfo && (
         <div style={{ fontSize: 11, marginTop: 4 }}>{bboxInfo}</div>
       )}

@@ -22,10 +22,36 @@ export function SiteForm({ onAddSite }: SiteFormProps) {
 
   return (
     <form data-testid="site-form" onSubmit={handleSubmit} style={{ padding: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-      <input data-testid="site-name-input" placeholder="Name" value={name} onChange={e => setName(e.target.value)} size={12} required />
-      <input data-testid="site-lat-input" placeholder="Latitude" value={lat} onChange={e => setLat(e.target.value)} size={8} required />
-      <input data-testid="site-lon-input" placeholder="Longitude" value={lon} onChange={e => setLon(e.target.value)} size={8} required />
-      <button data-testid="site-add-btn" type="submit" style={{ fontSize: 12 }}>+ Add</button>
+      <input
+        data-testid="site-name-input"
+        placeholder="Name"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        size={12}
+        required
+        aria-label="Site name"
+      />
+      <input
+        data-testid="site-lat-input"
+        placeholder="Latitude"
+        value={lat}
+        onChange={e => setLat(e.target.value)}
+        size={8}
+        required
+        aria-label="Site latitude"
+      />
+      <input
+        data-testid="site-lon-input"
+        placeholder="Longitude"
+        value={lon}
+        onChange={e => setLon(e.target.value)}
+        size={8}
+        required
+        aria-label="Site longitude"
+      />
+      <button data-testid="site-add-btn" type="submit" aria-label="Add site" style={{ fontSize: 12 }}>
+        + Add
+      </button>
     </form>
   )
 }

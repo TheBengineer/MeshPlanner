@@ -21,8 +21,24 @@ export function FileUpload({ onFile, accept = '.csv,.geojson,.json', label = 'Up
 
   return (
     <div data-testid="file-upload">
-      <button data-testid="upload-btn" onClick={() => inputRef.current?.click()} style={{ fontSize: 12 }}>{label}</button>
-      <input data-testid="file-input" ref={inputRef} type="file" accept={accept} onChange={handleChange} style={{ display: 'none' }} />
+      <button
+        data-testid="upload-btn"
+        onClick={() => inputRef.current?.click()}
+        aria-label={`Upload ${accept} file`}
+        style={{ fontSize: 12 }}
+        type="button"
+      >
+        {label}
+      </button>
+      <input
+        data-testid="file-input"
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        onChange={handleChange}
+        style={{ display: 'none' }}
+        aria-hidden="true"
+      />
     </div>
   )
 }

@@ -10,6 +10,11 @@
   --sans: system-ui, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
   --sidebar-width: 340px;
+  --sidebar-z: 100;
+  --overlay-z: 99;
+  --hamburger-z: 200;
+  --touch-min: 44px;
+  --transition-default: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -56,6 +61,7 @@ body {
   flex: 1;
   position: relative;
   min-width: 0;
+  height: 100%;
 }
 
 /* ── Sidebar ── */
@@ -70,7 +76,7 @@ body {
   background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
-  z-index: 100;
+  z-index: var(--sidebar-z);
 }
 
 .sidebar-header {
@@ -114,21 +120,21 @@ body {
 
 .hamburger-toggle {
   display: none;
-  position: absolute;
+  position: fixed;
   top: 8px;
   left: 8px;
-  z-index: 200;
-  width: 36px;
-  height: 36px;
+  z-index: var(--hamburger-z);
+  width: var(--touch-min);
+  height: var(--touch-min);
   padding: 0;
   align-items: center;
   justify-content: center;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.12);
   cursor: pointer;
-  transition: background 0.15s, box-shadow 0.15s;
+  transition: background 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 
 .hamburger-toggle:hover {
@@ -279,11 +285,11 @@ input:focus, select:focus {
     min-width: unset;
     max-width: 85vw;
     height: 100vh;
-    z-index: 100;
+    z-index: var(--sidebar-z);
     border-left: none;
     border-right: 1px solid var(--border);
     transform: translateX(-100%);
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform var(--transition-default);
     box-shadow: 2px 0 12px rgba(0,0,0,0.15);
   }
 
@@ -295,24 +301,26 @@ input:focus, select:focus {
     width: 100%;
   }
 
-  /* Touch-friendly form controls — larger tap targets */
+  /* Touch-friendly form controls — 44px min tap targets (iOS/Android a11y) */
   input, select, textarea {
-    min-height: 36px;
+    min-height: var(--touch-min);
     font-size: 14px;
   }
 
   button {
-    min-height: 36px;
-    padding: 6px 14px;
+    min-height: var(--touch-min);
+    padding: 8px 16px;
     font-size: 14px;
   }
 
-  .sidebar input, .sidebar select, .sidebar button {
-    min-height: 40px;
+  .sidebar input, .sidebar select, .sidebar textarea {
+    min-height: var(--touch-min);
+    padding: 10px 8px;
   }
 
   .sidebar button {
-    padding: 8px 14px;
+    min-height: var(--touch-min);
+    padding: 10px 14px;
   }
 
   /* Prevent horizontal scroll */

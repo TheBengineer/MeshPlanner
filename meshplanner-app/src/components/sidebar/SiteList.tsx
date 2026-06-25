@@ -10,26 +10,57 @@ interface SiteListProps {
 
 export function SiteList({ sites, selectedNames, onToggleSite, onDeleteSite, onClearAll }: SiteListProps) {
   if (sites.length === 0) {
-    return <div data-testid="site-list-empty" style={{ padding: 8, color: '#888' }}>No sites loaded. Upload a CSV/GeoJSON file or add manually.</div>
+    return (
+      <div
+        data-testid="site-list-empty"
+        role="status"
+        aria-live="polite"
+        style={{ padding: 8, color: '#888' }}
+      >
+        No sites loaded. Upload a CSV/GeoJSON file or add manually.
+      </div>
+    )
   }
-  
+
   return (
-    <div data-testid="site-list">
+    <div data-testid="site-list" role="region" aria-label="Site list">
       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px' }}>
         <strong>{sites.length} site(s)</strong>
-        <button onClick={onClearAll} style={{ fontSize: 11 }}>Clear All</button>
+        <button
+          onClick={onClearAll}
+          aria-label="Clear all sites"
+          style={{ fontSize: 11 }}
+          type="button"
+        >
+          Clear All
+        </button>
       </div>
       {sites.map(site => (
-        <div key={site.name} data-testid={`site-item-${site.name}`} style={{ display: 'flex', alignItems: 'center', padding: '2px 8px', fontSize: 13 }}>
+        <div
+          key={site.name}
+          data-testid={`site-item-${site.name}`}
+          style={{ display: 'flex', alignItems: 'center', padding: '2px 8px', fontSize: 13 }}
+        >
           <input
             type="checkbox"
             checked={selectedNames.includes(site.name)}
             onChange={() => onToggleSite(site.name)}
+            aria-label={`Include site ${site.name} in computation`}
             style={{ marginRight: 6 }}
           />
           <span style={{ flex: 1 }}>{site.name}</span>
-          <span style={{ color: '#888', fontSize: 11 }}>{site.latitude.toFixed(3)}, {site.longitude.toFixed(3)}</span>
-          <button data-testid={`delete-site-${site.name}`} onClick={() => onDeleteSite(site.name)} style={{ fontSize: 11, marginLeft: 4, color: '#c00' }}>✕</button>
+          <span style={{ color: '#888', fontSize: 11 }}>
+            {site.latitude.toFixed(3)}, {site.longitude.toFixed(3)}
+          </span>
+          <button
+            data-testid={`delete-site-${site.name}`}
+            onClick={() => onDeleteSite(site.name)}
+            aria-label={`Delete site ${site.name}`}
+            style={{ fontSize: 11, marginLeft: 4, color: '#c00' }}
+            type="button"
+          >
+            ✕
+          </button>
         </div>
       ))}
     </div>

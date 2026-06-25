@@ -82,6 +82,11 @@ self.onmessage = (e: MessageEvent<CoverageWorkerInput>) => {
         frequencyMhz: params.frequencyMhz,
         txHeightM: params.txHeightM,
         rxHeightM: params.rxHeightM,
+        climate: params.climate,
+        polarization: params.polarization,
+        groundPermittivity: params.groundPermittivity,
+        groundConductivity: params.groundConductivity,
+        surfaceRefractivity: params.surfaceRefractivity,
       })
       const budget = calculateLinkBudget(params, plResult.pathLossDb)
       const idx = pixRow * demWidth + pixCol

@@ -5,6 +5,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 import wasm from 'vite-plugin-wasm'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+import { visualizer } from 'rollup-plugin-visualizer'
+
+const isReport = process.env.REPORT === 'true'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -19,6 +22,12 @@ export default defineConfig({
           dest: 'assets',
         },
       ],
+    }),
+    isReport && visualizer({
+      filename: 'dist/bundle-report.html',
+      open: false,
+      gzipSize: true,
+      brotliSize: false,
     }),
     VitePWA({
       registerType: 'autoUpdate',
