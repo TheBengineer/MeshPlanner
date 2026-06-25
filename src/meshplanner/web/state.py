@@ -25,12 +25,12 @@ page : str                "coverage" | "optimize" | "batch"
 from __future__ import annotations
 
 from typing import Optional
-import streamlit as st
+
 import numpy as np
+import streamlit as st
 
 from meshplanner.propagation.params import LoraParams
 from meshplanner.sites.candidate import CandidateSite
-
 
 # ── Default values ────────────────────────────────────────────────────────────
 

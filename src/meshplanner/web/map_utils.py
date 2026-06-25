@@ -171,11 +171,10 @@ def add_color_legend(m: folium.Map, threshold: float = -120) -> None:
         m: Folium Map to attach the legend to.
         threshold: Minimum RSSI value (dBm) shown on the scale.
     """
-    from branca.element import MacroElement
-    from branca.element import Template
+    from branca.element import MacroElement, Template
 
-    legend_html = f"""
-    {{% macro html(this, kwargs) %}}
+    legend_html = """
+    {% macro html(this, kwargs) %}
     <div id="rssi-legend" style="
         position: fixed; bottom: 30px; right: 30px; z-index: 9999;
         background: white; padding: 8px 10px; border-radius: 6px;

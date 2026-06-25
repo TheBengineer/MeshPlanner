@@ -1,8 +1,8 @@
 """GeoTIFF export for coverage rasters."""
-import numpy as np
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import rasterio
 
 

@@ -42,11 +42,7 @@ from meshplanner.web.params import (
 )
 from meshplanner.web.state import (
     get_dem,
-    get_optimization_result,
-    get_rasters,
     get_sites,
-    set_optimization_result,
-    set_rasters,
 )
 
 
@@ -174,7 +170,6 @@ def _display_optimize_results(
     """Render the optimisation results: metrics, table, and map."""
     final = result.get("final", {})
     improvement = result.get("improvement", {})
-    greedy_info = result.get("greedy", {})
     used_fallback = result.get("used_fallback", False)
 
     selected_sites: list = final.get("selected_sites", [])

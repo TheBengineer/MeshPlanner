@@ -57,8 +57,6 @@ def render_coverage_page() -> None:
             f"Compute coverage for {selected_name}", type="primary"
         )
 
-    # Check if we already have cached results for this site
-    cached_site = st.session_state.get("_last_site")
     if submitted:
         st.session_state.pop("_last_rssi", None)
         st.session_state.pop("_last_meta", None)

@@ -19,9 +19,14 @@ import streamlit as st
 from streamlit_folium import st_folium
 
 from meshplanner.batch import process_sites
-from meshplanner.combine.union import combine_coverage, compute_redundancy
+from meshplanner.combine.union import combine_coverage
 from meshplanner.propagation.coverage import compute_coverage_at_threshold
-from meshplanner.web.map_utils import add_color_legend, add_coverage_overlay, add_site_pins, build_base_map
+from meshplanner.web.map_utils import (
+    add_color_legend,
+    add_coverage_overlay,
+    add_site_pins,
+    build_base_map,
+)
 from meshplanner.web.params import build_params, get_coverage_kwargs, get_threshold
 from meshplanner.web.state import get_dem, get_sites
 
