@@ -47,6 +47,8 @@ export function computeCoverageRaster(
     }
   }
 
+  /* ── Gap-filling: interpolate between radials, searching nearby distances ── */
+
   for (let row = 0; row < demHeight; row++) {
     for (let col = 0; col < demWidth; col++) {
       const idx = row * demWidth + col
@@ -61,18 +63,31 @@ export function computeCoverageRaster(
       const leftAngle = radialIdx * anglePerRadial
       const rightAngle = ((radialIdx + 1) % numRadials) * anglePerRadial
 
-      const [leftLat, leftLon] = destinationPoint(txLat, txLon, leftAngle, dist)
-      const [rightLat, rightLon] = destinationPoint(txLat, txLon, rightAngle, dist)
+      /**
+       * Sample the RSSI at a given bearing and approximate distance,
+       * searching a window of ±3 distance steps to handle the
+       * 0.2 km quantization of the radial sweep. This eliminates
+       * concentric ring artifacts by finding the nearest actual
+       * computation point instead of requiring an exact distance match.
+       */
+      const sampleRadial = (angle: number): number => {
+        const searchDeltas = [0, stepKm, -stepKm, 2 * stepKm, -2 * stepKm, 3 * stepKm, -3 * stepKm]
+        for (const delta of searchDeltas) {
+          const d = dist + delta
+          if (d < stepKm || d > maxRangeKm) continue
+          const [slat, slon] = destinationPoint(txLat, txLon, angle, d)
+          const sc = Math.round((slon - demAffine.c) / demAffine.a)
+          const sr = Math.round((slat - demAffine.f) / demAffine.e)
+          if (sc >= 0 && sc < demWidth && sr >= 0 && sr < demHeight) {
+            const v = rssi[sr * demWidth + sc]
+            if (v !== undefined && v > -Infinity) return v
+          }
+        }
+        return -Infinity
+      }
 
-      const leftCol = Math.round((leftLon - demAffine.c) / demAffine.a)
-      const leftRow = Math.round((leftLat - demAffine.f) / demAffine.e)
-      const rightCol = Math.round((rightLon - demAffine.c) / demAffine.a)
-      const rightRow = Math.round((rightLat - demAffine.f) / demAffine.e)
-
-      let leftRssi = -Infinity
-      let rightRssi = -Infinity
-      if (leftCol >= 0 && leftCol < demWidth && leftRow >= 0 && leftRow < demHeight) leftRssi = rssi[leftRow * demWidth + leftCol] ?? -Infinity
-      if (rightCol >= 0 && rightCol < demWidth && rightRow >= 0 && rightRow < demHeight) rightRssi = rssi[rightRow * demWidth + rightCol] ?? -Infinity
+      const leftRssi = sampleRadial(leftAngle)
+      const rightRssi = sampleRadial(rightAngle)
 
       if (leftRssi > -Infinity && rightRssi > -Infinity) {
         const weight = (bear - leftAngle) / (rightAngle - leftAngle + 360)

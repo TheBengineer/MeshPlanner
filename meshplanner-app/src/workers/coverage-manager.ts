@@ -52,6 +52,23 @@ function fillCoverageGaps(
 ): void {
   const pixelCount = width * height
   const anglePerRadial = 360 / numRadials
+  const stepKm = 0.2
+
+  const sampleRadial = (angle: number, dist: number): number => {
+    const searchDeltas = [0, stepKm, -stepKm, 2 * stepKm, -2 * stepKm, 3 * stepKm, -3 * stepKm]
+    for (const delta of searchDeltas) {
+      const d = dist + delta
+      if (d < stepKm || d > maxRangeKm) continue
+      const [slat, slon] = destinationPoint(txLat, txLon, angle, d)
+      const sc = Math.round((slon - demAffine.c) / demAffine.a)
+      const sr = Math.round((slat - demAffine.f) / demAffine.e)
+      if (sc >= 0 && sc < width && sr >= 0 && sr < height) {
+        const v = rssi[sr * width + sc]
+        if (v !== undefined && v > -Infinity) return v
+      }
+    }
+    return -Infinity
+  }
 
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
@@ -65,27 +82,12 @@ function fillCoverageGaps(
       if (dist > maxRangeKm || dist < 0.1) continue
 
       const bear = bearing(txLat, txLon, lat, lon)
-
       const radialIdx = Math.floor(bear / anglePerRadial) % numRadials
       const leftAngle = radialIdx * anglePerRadial
       const rightAngle = ((radialIdx + 1) % numRadials) * anglePerRadial
 
-      const [leftLat, leftLon] = destinationPoint(txLat, txLon, leftAngle, dist)
-      const [rightLat, rightLon] = destinationPoint(txLat, txLon, rightAngle, dist)
-
-      const leftCol = Math.round((leftLon - demAffine.c) / demAffine.a)
-      const leftRow = Math.round((leftLat - demAffine.f) / demAffine.e)
-      const rightCol = Math.round((rightLon - demAffine.c) / demAffine.a)
-      const rightRow = Math.round((rightLat - demAffine.f) / demAffine.e)
-
-      let leftRssi = -Infinity
-      let rightRssi = -Infinity
-      if (leftCol >= 0 && leftCol < width && leftRow >= 0 && leftRow < height) {
-        leftRssi = rssi[leftRow * width + leftCol] ?? -Infinity
-      }
-      if (rightCol >= 0 && rightCol < width && rightRow >= 0 && rightRow < height) {
-        rightRssi = rssi[rightRow * width + rightCol] ?? -Infinity
-      }
+      const leftRssi = sampleRadial(leftAngle, dist)
+      const rightRssi = sampleRadial(rightAngle, dist)
 
       if (leftRssi > -Infinity && rightRssi > -Infinity) {
         rssi[idx] = angularInterpolate(leftRssi, rightRssi, leftAngle, rightAngle, bear)
