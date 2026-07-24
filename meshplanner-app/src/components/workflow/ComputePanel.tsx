@@ -6,7 +6,7 @@ import { greedyMinSites } from "@/lib/optimize/greedy"
 import { buildCoverageMatrix } from "@/lib/optimize/matrix"
 import { warmStartMinSites } from "@/lib/optimize/warmstart"
 import { computeCoverageWithWorkers } from "@/workers/coverage-manager"
-import { WasmCoverageEngine } from "@/engine/WasmCoverageEngine"
+import { JsCoverageEngine } from "@/engine/JsCoverageEngine"
 import { coverageImage } from "@/lib/render/coverage-image"
 import { terrainImage } from "@/lib/render/terrain-image"
 import type { CoverageRaster, OptimizationResult } from "@/lib/types"
@@ -89,9 +89,9 @@ export function ComputePanel() {
     setOptimizationPhase,
   ])
 
-  const engineRef = useRef<WasmCoverageEngine | null>(null)
+  const engineRef = useRef<JsCoverageEngine | null>(null)
   const getEngine = () => {
-    if (!engineRef.current) engineRef.current = new WasmCoverageEngine()
+    if (!engineRef.current) engineRef.current = new JsCoverageEngine()
     return engineRef.current
   }
 

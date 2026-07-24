@@ -299,104 +299,79 @@ export class WasmCoverageEngine implements CoverageEngine {
       /* ── Terrain: build Int16Array pages from DEM ── */
       const pages = buildPages(refs, demData, demWidth, demHeight, demAffine, ippd)
       report({ phase: 'terrain', completed: refs.length, total: refs.length, fraction: TERRAIN_SPAN })
+      report({ phase: 'terrain', completed: refs.length, total: refs.length, fraction: TERRAIN_SPAN })
       opts.signal?.throwIfAborted()
 
-      /* ── Compute: split radials across workers, each with own SPLAT! context ── */
-      const totalRadials = region.radials
-      const slices = sliceRadials(totalRadials, this.poolSize)
-      const runId = this.nextRunId++
-      const pool = this.ensureWorkers(slices.length)
-
-      const cancelAll = () => {
-        for (const pw of pool) pw.worker.postMessage({ type: 'cancel', runId } satisfies ToWorker)
-      }
-
-      const results = await new Promise<DoneMessage[]>((resolve, reject) => {
-        const done: (DoneMessage | undefined)[] = new Array(slices.length)
-        let remaining = slices.length
-        let settled = false
-
-        const fail = (err: Error) => {
-          if (settled) return
-          settled = true
-          cancelAll()
-          cleanup()
-          reject(err)
+      /* ── Compute: main-thread SPLAT! using EngineContext (no workers) ── */
+      const ctx = EngineContext.create(m, params)
+      try {
+        for (let i = 0; i < refs.length; i++) {
+          const data = pages[i]
+          if (data) ctx.loadPage(i, data)
         }
 
-        const onAbort = () => fail(new DOMException('aborted', 'AbortError'))
-        opts.signal?.addEventListener('abort', onAbort, { once: true })
+        // Debug: check elevation at transmitter position
+        const ppd = 1 / ippd
+        const txCol = Math.round((params.lon - region.west) / ppd)
+        const txRow = Math.round((region.north - params.lat) / ppd)
+        console.log(`[SPLAT] TX pixel: col=${txCol}, row=${txRow}, region: ${region.west.toFixed(4)},${region.south.toFixed(4)} ${region.east.toFixed(4)},${region.north.toFixed(4)}`)
+        // Count valid vs NaN pixels in signal output to check if terrain is used
+        const checkCount = Math.min(10000, region.width * region.height)
+        let validSignal = 0, zeroSignal = 0
+        // We'll check after rasterize
 
-        const cleanup = () => {
-          opts.signal?.removeEventListener('abort', onAbort)
-          for (const pw of pool) pw.handler = null
+        const totalRadials = ctx.radialCount()
+        const chunk = 32
+
+        for (let at = 0; at < totalRadials; ) {
+          opts.signal?.throwIfAborted()
+          const ran = ctx.runRadials(at, Math.min(chunk, totalRadials - at))
+          at += ran
+          report({ phase: 'compute', completed: at, total: totalRadials, fraction: TERRAIN_SPAN + (at / totalRadials) * COMPUTE_SPAN })
         }
 
-        slices.forEach((slice, i) => {
-          const pw = pool[i]!
-          pw.handler = (msg: FromWorker) => {
-            if (msg.type === 'ready') return
-            if (msg.runId !== runId) return
-            if (msg.type === 'progress') {
-              const doneRadials = msg.radialsDone
-              report({ phase: 'compute', completed: doneRadials, total: totalRadials, fraction: TERRAIN_SPAN + (doneRadials / totalRadials) * COMPUTE_SPAN })
-            } else if (msg.type === 'done') {
-              done[i] = msg
-              if (--remaining === 0 && !settled) {
-                settled = true
-                cleanup()
-                resolve(done as DoneMessage[])
-              }
-            } else if (msg.type === 'error') {
-              const err = msg.code === 'aborted'
-                ? new DOMException('aborted', 'AbortError')
-                : new Error(`SPLAT! worker failed (${msg.code}): ${msg.message}`)
-              fail(err)
-            }
+        ctx.rasterize()
+        const reg = ctx.region()
+        const signal = ctx.signal(reg.width, reg.height)
+        const mask = ctx.mask(reg.width, reg.height)
+
+        report({ phase: 'finalize', completed: 0, total: 1, fraction: TERRAIN_SPAN + COMPUTE_SPAN })
+        const cells = reg.width * reg.height
+        const dbm = new Float32Array(cells)
+        for (let i = 0; i < cells; i++) {
+          dbm[i] = (mask[i]! & 248) !== 0 ? signal[i]! - 200 : NaN
+        }
+
+        // Log signal range for debugging
+        let minDbm = Infinity, maxDbm = -Infinity, sumDbm = 0, countDbm = 0
+        for (let i = 0; i < cells; i++) {
+          const v = dbm[i]!
+          if (Number.isFinite(v)) {
+            if (v < minDbm) minDbm = v
+            if (v > maxDbm) maxDbm = v
+            sumDbm += v; countDbm++
           }
+        }
+        console.log(`[SPLAT-MT] Signal: ${minDbm.toFixed(1)} to ${maxDbm.toFixed(1)} dBm, avg: ${countDbm > 0 ? (sumDbm / countDbm).toFixed(1) : 'N/A'}, cells: ${countDbm}`)
 
-          pw.worker.postMessage({
-            type: 'run',
-            runId,
-            params,
-            pages,
-            start: slice.start,
-            end: slice.end,
-            chunk: 32,
-          } satisfies ToWorker)
-        })
-      })
+        const itmWarnings = ctx.errnumCounts()
+        report({ phase: 'finalize', completed: 1, total: 1, fraction: 1 })
 
-      /* ── Merge first-touch + convert to dBm ── */
-      report({ phase: 'finalize', completed: 0, total: 1, fraction: TERRAIN_SPAN + COMPUTE_SPAN })
-      const cells = region.width * region.height
-      const merged = mergeFirstTouch(
-        results.map((r): WorkerRaster => ({ signal: r.signal as Float32Array, mask: r.mask })),
-        cells,
-      )
-
-      const dbm = new Float32Array(cells)
-      for (let i = 0; i < cells; i++) {
-        dbm[i] = (merged.mask[i]! & 248) !== 0 ? merged.signal[i]! - 200 : NaN
-      }
-
-      const itmWarnings = [0, 0, 0, 0, 0, 0]
-      for (const r of results) r.itmWarnings.forEach((v, i) => { itmWarnings[i] = (itmWarnings[i] ?? 0) + v })
-
-      report({ phase: 'finalize', completed: 1, total: 1, fraction: 1 })
-
-      return {
-        dbm, width: region.width, height: region.height,
-        bounds: { north: region.north, south: region.south, east: region.east, west: region.west },
-        pixelDegrees: 1 / 1200,
-        stats: {
-          radials: totalRadials,
-          pages: refs.length,
-          pagesWithData: pages.filter((p) => p !== null).length,
-          itmWarnings,
-          elapsedMs: performance.now() - started,
-          workers: slices.length,
-        },
+        return {
+          dbm, width: reg.width, height: reg.height,
+          bounds: { north: reg.north, south: reg.south, east: reg.east, west: reg.west },
+          pixelDegrees: 1 / ippd,
+          stats: {
+            radials: totalRadials,
+            pages: refs.length,
+            pagesWithData: pages.filter((p) => p !== null).length,
+            itmWarnings,
+            elapsedMs: performance.now() - started,
+            workers: 1,
+          },
+        }
+      } finally {
+        ctx.destroy()
       }
     } finally {
       this.busy = false
