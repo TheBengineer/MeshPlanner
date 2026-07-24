@@ -202,7 +202,9 @@ function buildPages(
 
     for (let r = 0; r < ippd; r++) {
       for (let c = 0; c < ippd; c++) {
-        const lat = pageNorth - (r + 0.5) * latStep
+        // SPLAT! find_page returns x=0 for south, x=ippd-1 for north.
+        // Store rows south→north so page[0]=south terrain.
+        const lat = ref.minNorth + (r + 0.5) * latStep
         const lon = pageWest + (c + 0.5) * lonStep
         let col = (lon - demAffine.c) / demAffine.a
         let row = (lat - demAffine.f) / demAffine.e
@@ -349,8 +351,10 @@ export class WasmCoverageEngine implements CoverageEngine {
             const pgWest = -(ref.minWest + 1)
             const pcOffset = Math.round((pgWest - reg.west) * ippd)
             const prOffset = Math.round((reg.north - ref.minNorth - 1) * ippd)
+            // Page rows are south→north (pr=0=south). Output rows are
+            // north→south (r=0=north). Reverse the row mapping.
             for (let pr = 0; pr < ippd; pr++) {
-              const r = prOffset + pr
+              const r = prOffset + (ippd - 1 - pr)
               if (r < 0 || r >= reg.height) continue
               for (let pc = 0; pc < ippd; pc++) {
                 const c = pcOffset + pc
