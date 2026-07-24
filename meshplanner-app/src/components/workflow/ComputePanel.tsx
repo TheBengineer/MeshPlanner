@@ -171,6 +171,7 @@ export function ComputePanel() {
             groundPermittivity: params.groundPermittivity ?? 15,
             groundConductivity: params.groundConductivity ?? 0.005,
             surfaceRefractivity: params.surfaceRefractivity ?? 314,
+            clutterHeightM: coverageParams.clutterHeightM ?? 1.0,
             radiusKm: maxRangeKm,
             numRadials,
             resolutionIppd: ippd,

@@ -27,6 +27,7 @@ export interface CoverageParams {
   threshold: number
   targetCoverage: number
   highRes?: boolean
+  clutterHeightM?: number
 }
 
 /* ── Params slice ── */
@@ -164,6 +165,7 @@ export const useStore = create<AppStore>((set, get) => ({
     numRadials: 360,
     threshold: -120,
     targetCoverage: 0.95,
+    clutterHeightM: 1.0,
   },
   linkBudget: null,
 

@@ -12,6 +12,26 @@ const CLIMATE_CODES: Record<number, string> = {
   7: 'Maritime Temperate (sea)',
 }
 
+interface DeviceProfile {
+  label: string
+  txPowerDbm: number
+  txGainDbi: number
+}
+
+const DEVICE_PROFILES: DeviceProfile[] = [
+  { label: 'Custom / manual', txPowerDbm: 22, txGainDbi: 3 },
+  { label: 'Heltec WiFi LoRa 32 V3', txPowerDbm: 21, txGainDbi: 2 },
+  { label: 'Heltec WiFi LoRa 32 V4 (high-power)', txPowerDbm: 28, txGainDbi: 2 },
+  { label: 'Heltec WiFi LoRa 32 V2', txPowerDbm: 20, txGainDbi: 3 },
+  { label: 'LILYGO T-Beam (SX1262)', txPowerDbm: 22, txGainDbi: 2 },
+  { label: 'LILYGO T-Beam Supreme', txPowerDbm: 22, txGainDbi: 2 },
+  { label: 'LILYGO T-Echo', txPowerDbm: 22, txGainDbi: 1 },
+  { label: 'LILYGO T-Deck', txPowerDbm: 22, txGainDbi: 2 },
+  { label: 'RAK WisBlock (RAK4631)', txPowerDbm: 22, txGainDbi: 2 },
+  { label: 'Station G2', txPowerDbm: 30, txGainDbi: 3 },
+  { label: 'Seeed SenseCAP T1000-E', txPowerDbm: 22, txGainDbi: 1 },
+]
+
 interface LoraParamsFormProps {
   onParamsChange?: (params: LoraParams, coverageKwargs: Record<string, number | boolean>) => void
 }
@@ -26,6 +46,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
   const [txHeight, setTxHeight] = useState(2)
   const [txGain, setTxGain] = useState(3)
   const [cableLossTx, setCableLossTx] = useState(0.5)
+  const [deviceIdx, setDeviceIdx] = useState(0)
 
   /* Receiver */
   const [rxHeight, setRxHeight] = useState(1.5)
@@ -50,6 +71,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
   const [groundPermittivity, setGroundPermittivity] = useState(15.0)
   const [groundConductivity, setGroundConductivity] = useState(0.005)
   const [surfaceRefractivity, setSurfaceRefractivity] = useState(314)
+  const [clutterHeight, setClutterHeight] = useState(1.0)
 
   /* Collapse state */
   const [loraOpen, setLoraOpen] = useState(true)
@@ -65,6 +87,14 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
       if ('key' in e) e.preventDefault()
       setter(!current)
     }
+
+  const handleDeviceChange = (idx: number) => {
+    setDeviceIdx(idx)
+    if (idx > 0) {
+      const d = DEVICE_PROFILES[idx]
+      if (d) { setTxPower(d.txPowerDbm); setTxGain(d.txGainDbi) }
+    }
+  }
 
   const params: LoraParams = {
     frequencyMhz: BAND_CENTERS[band] ?? 915,
@@ -89,8 +119,8 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
   const budget = calculateLinkBudget(params, 140)
 
   const handleApply = useCallback(() => {
-    onParamsChange?.(params, { maxRangeKm: maxRange, numRadials: 360, stepKm: 0.1, numWorkers: 4, threshold, targetCoverage: target, highRes })
-  }, [params, maxRange, threshold, mode, target, highRes, onParamsChange])
+    onParamsChange?.(params, { maxRangeKm: maxRange, numRadials: 360, stepKm: 0.1, numWorkers: 4, threshold, targetCoverage: target, highRes, clutterHeightM: clutterHeight })
+  }, [params, maxRange, threshold, mode, target, highRes, clutterHeight, onParamsChange])
 
   const sectionHeader = (label: string, open: boolean, toggleFn: (e: any) => void, testId: string) => (
     <div
@@ -130,8 +160,14 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
       {/* ── Transmitter ── */}
       {sectionHeader('Transmitter', txOpen, toggle(setTxOpen, txOpen), 'transmitter-toggle')}
       {txOpen && (<div style={{ marginTop: 4 }}>
+        <label style={{ display: 'block', marginBottom: 6 }}>
+          Device (optional)
+          <select value={deviceIdx} onChange={e => handleDeviceChange(Number(e.target.value))} style={{ marginLeft: 8 }} aria-label="Device profile">
+            {DEVICE_PROFILES.map((d, i) => <option key={i} value={i}>{d.label}</option>)}
+          </select>
+        </label>
         <div style={{ marginBottom: 6 }}>TX Power: {txPower} dBm
-          <input type="range" min={0} max={30} value={txPower} onChange={e => setTxPower(Number(e.target.value))} style={{ width: '100%' }} aria-label="Transmit power in dBm" />
+          <input type="range" min={0} max={30} value={txPower} onChange={e => { setTxPower(Number(e.target.value)); setDeviceIdx(0) }} style={{ width: '100%' }} aria-label="Transmit power in dBm" />
         </div>
         <label style={{ display: 'block', marginBottom: 6 }}>
           Height AGL (m)
@@ -139,7 +175,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
         </label>
         <label style={{ display: 'block', marginBottom: 6 }}>
           Antenna Gain (dBi)
-          <input type="number" min={0} step={0.1} value={txGain} onChange={e => setTxGain(Number(e.target.value))} style={{ marginLeft: 8, width: 70 }} aria-label="TX antenna gain" />
+          <input type="number" min={0} step={0.1} value={txGain} onChange={e => { setTxGain(Number(e.target.value)); setDeviceIdx(0) }} style={{ marginLeft: 8, width: 70 }} aria-label="TX antenna gain" />
         </label>
         <label style={{ display: 'block', marginBottom: 6 }}>
           Cable Loss (dB)
@@ -225,6 +261,10 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
             <option value={0}>Horizontal</option>
             <option value={1}>Vertical</option>
           </select>
+        </label>
+        <label style={{ display: 'block', marginBottom: 6 }}>
+          Clutter Height (m)
+          <input type="number" min={0} step={0.1} value={clutterHeight} onChange={e => setClutterHeight(Number(e.target.value))} style={{ marginLeft: 8, width: 70 }} aria-label="Clutter height" />
         </label>
         <label style={{ display: 'block', marginBottom: 6 }}>
           Ground Permittivity (ε)
