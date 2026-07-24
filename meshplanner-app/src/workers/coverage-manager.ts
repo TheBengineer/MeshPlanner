@@ -201,7 +201,7 @@ export async function computeCoverageWithWorkers(
   // ---- Cancellation support (ported from meshtastic) --------------------
   let settled = false
   const cancelAll = () => {
-    for (const w of workers) w.postMessage({ type: 'cancel' })
+    for (let i = 0; i < workers.length; i++) workers[i]?.postMessage({ type: 'cancel', runId: i })
   }
 
   // ---- Spawn workers ---------------------------------------------------
@@ -235,7 +235,7 @@ export async function computeCoverageWithWorkers(
           workerProgressMap.set(wi, data.radialsDone as number)
           globalProgress += delta
           setPhase('Computing coverage', Math.min(globalProgress, numRadials), numRadials)
-        } else if (data.type === "result") {
+        } else if (data.type === "done") {
           resolve({ signal: data.signal as Float32Array, mask: data.mask as Uint8Array })
         }
       }
@@ -252,13 +252,39 @@ export async function computeCoverageWithWorkers(
 
     workerPromises.push(promise)
 
+    // Build EngineRunParams from LoraParams
+    const engineParams = {
+      lat: txLat, lon: txLon,
+      txHeightM: params.txHeightM,
+      rxHeightM: params.rxHeightM,
+      frequencyMhz: params.frequencyMhz,
+      txPowerDbm: params.txPowerDbm,
+      txAntennaGainDbi: params.txAntennaGainDbi,
+      rxAntennaGainDbi: params.rxAntennaGainDbi,
+      rxSensitivityDbm: params.rxSensitivityDbm,
+      bandwidthHz: params.bandwidthHz,
+      requiredMarginDb: params.requiredMarginDb,
+      cableLossTxDb: params.cableLossTxDb,
+      cableLossRxDb: params.cableLossRxDb,
+      climate: params.climate ?? 5,
+      polarization: params.polarization ?? 1,
+      groundPermittivity: params.groundPermittivity ?? 15,
+      groundConductivity: params.groundConductivity ?? 0.005,
+      surfaceRefractivity: params.surfaceRefractivity ?? 314,
+      radiusKm: maxRangeKm,
+      numRadials,
+    }
+
     const demCopy = new Float32Array(demData)
     worker.postMessage(
       {
-        demData: demCopy, demWidth, demHeight, demAffine,
-        txLat, txLon, params,
-        radialStart: start, radialCount: count,
-        maxRangeKm, numRadials,
+        type: 'run' as const,
+        runId: wi,
+        params: engineParams,
+        demData: demCopy,
+        demWidth, demHeight, demAffine,
+        start, end,
+        chunk: 32,
       },
       [demCopy.buffer],
     )
