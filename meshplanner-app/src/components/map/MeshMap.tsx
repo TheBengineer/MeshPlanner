@@ -83,10 +83,11 @@ export function MeshMap({
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef(false)
   const [dragging, setDragging] = useState(false)
+  const storeViewport = useStore((s) => s.viewport)
   const [viewport, setViewport] = useState({
-    latitude: 35.6,
-    longitude: -82.5,
-    zoom: 10,
+    latitude: storeViewport.latitude,
+    longitude: storeViewport.longitude,
+    zoom: storeViewport.zoom,
   })
   const bbox = useStore((s) => s.bbox)
   const setBbox = useStore((s) => s.setBbox)

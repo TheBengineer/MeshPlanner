@@ -71,6 +71,7 @@ export default function App() {
       }
       if (state.c) s.setColormap(state.c)
       if (state.m) s.setMode(state.m)
+      if (state.vp) useStore.setState({ viewport: { latitude: state.vp.lat, longitude: state.vp.lon, zoom: state.vp.zoom } })
     }
   }, [])
 
