@@ -7,10 +7,28 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
 import { visualizer } from 'rollup-plugin-visualizer'
 
+// Node.js v20 emits ECONNRESET on polyfill sockets during dev server lifecycle.
+// This is harmless — catch it to prevent crash.
+process.on('uncaughtException', (err) => {
+  if ((err as NodeJS.ErrnoException).code === 'ECONNRESET') return
+  console.error('Uncaught exception:', err)
+})
+
 const isReport = process.env.REPORT === 'true'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    port: 5173,
+    strictPort: false,
+    hmr: {
+      protocol: 'ws',
+      clientPort: 5173,
+    },
+    watch: {
+      usePolling: false,
+    },
+  },
   plugins: [
     react(),
     wasm(),
