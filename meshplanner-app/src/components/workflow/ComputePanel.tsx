@@ -166,13 +166,27 @@ export function ComputePanel() {
             demAffine,
           })
 
-          // Convert CoverageResult to CoverageRaster
-          const pixelDeg = result.pixelDegrees
+          // Convert CoverageResult to CoverageRaster, sampled onto DEM grid
+          // Use SPLAT!'s actual pixel size from its output dimensions and bounds
+          const splatPixelLon = (result.bounds.east - result.bounds.west) / result.width
+          const splatPixelLat = (result.bounds.north - result.bounds.south) / result.height
+          const demRssi = new Float32Array(dem.width * dem.height).fill(-Infinity)
+          for (let r = 0; r < dem.height; r++) {
+            const lat = demAffine.f + r * demAffine.e
+            for (let c = 0; c < dem.width; c++) {
+              const lon = demAffine.c + c * demAffine.a
+              const sc = Math.round((lon - result.bounds.west) / splatPixelLon)
+              const sr = Math.round((result.bounds.north - lat) / splatPixelLat)
+              if (sc >= 0 && sc < result.width && sr >= 0 && sr < result.height) {
+                demRssi[r * dem.width + c] = result.dbm[sr * result.width + sc]!
+              }
+            }
+          }
           const raster: CoverageRaster = {
-            rssi: result.dbm,
-            width: result.width,
-            height: result.height,
-            affine: new Affine(pixelDeg, 0, result.bounds.west, 0, -pixelDeg, result.bounds.north),
+            rssi: demRssi,
+            width: dem.width,
+            height: dem.height,
+            affine: new Affine(demAffine.a, 0, demAffine.c, 0, demAffine.e, demAffine.f),
             txLat: site.latitude,
             txLon: site.longitude,
             params,

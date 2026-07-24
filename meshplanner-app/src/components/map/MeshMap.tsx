@@ -419,7 +419,7 @@ export function MeshMap({
               key={site.name}
               latitude={site.latitude}
               longitude={site.longitude}
-              draggable={placing}
+              draggable
               onDragStart={handleDragStart}
               onDrag={(e) => handleDrag(site.name, e)}
               onDragEnd={(e) => handleDragEnd(site.name, e)}

@@ -194,8 +194,9 @@ function buildPages(
   return refs.map((ref) => {
     const page = new Int16Array(ippd * ippd)
     const pageNorth = ref.minNorth + 1
-    const pageWest = -(360 - ref.minWest) // convert from west-positive back to signed
-    const pageSouth = ref.minNorth
+    // SPLAT! uses west-positive longitude 0-359; convert to signed by negating
+    // (all our pages are in the western hemisphere so west-positive <= 180).
+    const pageWest = -ref.minWest
     const pageEast = pageWest + 1
     const latStep = 1 / ippd
     const lonStep = 1 / ippd
