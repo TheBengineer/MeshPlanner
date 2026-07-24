@@ -114,6 +114,7 @@ export function ComputePanel() {
     const startTime = performance.now()
       const { maxRangeKm, numRadials, threshold, targetCoverage, highRes } = coverageParams
       const ippd = highRes ? 3600 : 1200
+      const demZoom = highRes ? 13 : 12
 
     try {
       // ── Step 1: Fetch DEM ──
@@ -122,7 +123,7 @@ export function ComputePanel() {
       try {
         dem = await fetchDemRaster(bbox, (pct) => {
           setProgress({ current: 0, total: 4, label: `DEM: ${pct}%` })
-        })
+        }, demZoom)
       } catch (demErr) {
         const msg = demErr instanceof Error ? demErr.message : "Unknown DEM error"
         throw new Error(

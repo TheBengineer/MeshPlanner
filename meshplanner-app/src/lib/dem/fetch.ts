@@ -121,13 +121,13 @@ function sampleTileIntoArray(
 export async function fetchDemRaster(
   bbox: Bbox,
   onProgress?: (pct: number) => void,
+  zoom: number = 12,
 ): Promise<{
   data: Float32Array
   width: number
   height: number
   affine: { a: number; c: number; f: number; e: number }
 }> {
-  const zoom = 12
   const { xMin, xMax, yMin, yMax } = getTileRange(
     bbox.west,
     bbox.south,
@@ -137,14 +137,13 @@ export async function fetchDemRaster(
   )
   const nTiles = (xMax - xMin + 1) * (yMax - yMin + 1)
 
-  // Calculate output dimensions from bbox at ~30m resolution
-  // Use square pixels (same size for lat and lon) to avoid aspect ratio
-  // distortion when rendering coverage overlays on the map.
+  // Use the zoom level to determine DEM resolution
+  // Base: ~30m at zoom 12, scales inversely with zoom
   const kmPerDeg = 111.32
-  const pixelDeg = 30 / 1000 / kmPerDeg // ~30m in degrees
+  const pixelDeg = (30 / 1000 / kmPerDeg) * (12 / zoom)
 
-  const width = Math.ceil((bbox.east - bbox.west) / pixelDeg)
-  const height = Math.ceil((bbox.north - bbox.south) / pixelDeg)
+  const width = Math.max(1, Math.ceil((bbox.east - bbox.west) / pixelDeg))
+  const height = Math.max(1, Math.ceil((bbox.north - bbox.south) / pixelDeg))
 
   const demArray = new Float32Array(width * height).fill(-32768)
   const demAffine = {
