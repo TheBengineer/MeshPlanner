@@ -135,12 +135,6 @@ export function MeshMap({
     if (externalBbox) setBbox(externalBbox)
   }, [externalBbox])
 
-  /* ── Sync local bbox changes to parent store ── */
-  useEffect(() => {
-    if (bbox) onBboxSelect?.(bbox)
-    // Only run on bbox changes, not on mount (initial default is synced below)
-  }, [bbox]) // eslint-disable-line react-hooks/exhaustive-deps
-
   /* ── Sync initial default bbox to store on mount ── */
   useEffect(() => {
     if (!externalBbox) onBboxSelect?.(defaultBbox)
@@ -370,11 +364,14 @@ export function MeshMap({
         east = Math.min(180, Math.max(east, west + 0.001))
         south = Math.max(-90, Math.min(south, north - 0.001))
         north = Math.min(90, Math.max(north, south + 0.001))
-        return { west, south, east, north }
+        const next = { west, south, east, north }
+        // Use queueMicrotask to break out of React's render cycle
+        queueMicrotask(() => onBboxSelect?.(next))
+        return next
       })
       setDragging(false)
     },
-    [],
+    [onBboxSelect],
   )
 
   const selectedSet = new Set(selectedSiteNames)
