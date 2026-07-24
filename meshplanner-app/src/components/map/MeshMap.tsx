@@ -10,11 +10,12 @@ import type {
 import type { StyleSpecification } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Bbox, CandidateSite } from '@/lib/types'
+import type { CoverageImageResult } from '@/lib/render/coverage-image'
 
 interface MeshMapProps {
   sites?: CandidateSite[]
   selectedSiteNames?: string[]
-  coverageGeoJson?: GeoJSON.FeatureCollection
+  coverageImage?: CoverageImageResult | null
   bbox?: Bbox | null
   onBboxSelect?: (bbox: Bbox) => void
   onMapClick?: (lat: number, lon: number) => void
@@ -51,7 +52,7 @@ const TOPO_STYLE: StyleSpecification = {
 export function MeshMap({
   sites = [],
   selectedSiteNames = [],
-  coverageGeoJson,
+  coverageImage: coverageImg,
   bbox: externalBbox,
   onBboxSelect,
   onMapClick,
@@ -93,6 +94,40 @@ export function MeshMap({
   }, [])
 
   useEffect(() => clearLongPress, [clearLongPress])
+
+  /* ── Coverage heatmap image overlay ── */
+  const prevCoverageImgRef = useRef<CoverageImageResult | null>(null)
+  useEffect(() => {
+    const map = mapRef.current?.getMap()
+    if (!map) return
+    if (prevCoverageImgRef.current) {
+      try {
+        map.removeLayer('coverage-heatmap')
+        map.removeSource('coverage-heatmap')
+      } catch { /* already removed */ }
+    }
+    prevCoverageImgRef.current = coverageImg ?? null
+    if (!coverageImg) return
+    const img = new window.Image()
+    img.onload = () => {
+      try {
+        map.addSource('coverage-heatmap', {
+          type: 'image' as const,
+          url: coverageImg.url,
+          coordinates: coverageImg.coordinates,
+        })
+        map.addLayer({
+          id: 'coverage-heatmap',
+          type: 'raster' as const,
+          source: 'coverage-heatmap',
+          paint: { 'raster-opacity': 1, 'raster-resampling': 'nearest' },
+        })
+      } catch (e) {
+        console.warn('Failed to add coverage heatmap:', e)
+      }
+    }
+    img.src = coverageImg.url
+  }, [coverageImg])
 
   /* ── Sync external bbox (from sidebar) into local state ── */
   useEffect(() => {
@@ -462,16 +497,6 @@ export function MeshMap({
           </Marker>
         ))}
 
-        {/* Coverage heatmap overlay */}
-        {coverageGeoJson && (
-          <Source id="coverage" type="geojson" data={coverageGeoJson}>
-            <Layer
-              id="coverage-fill"
-              type="fill"
-              paint={{ 'fill-color': '#e74c3c', 'fill-opacity': 0.3 }}
-            />
-          </Source>
-        )}
       </Map>
     </div>
   )

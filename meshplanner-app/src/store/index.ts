@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import type { Bbox, CandidateSite, LoraParams, LinkBudget, CoverageRaster, OptimizationResult } from "@/lib/types"
+import type { CoverageImageResult } from "@/lib/render/coverage-image"
 import { DEFAULT_LORA_PARAMS } from "@/lib/constants"
 import { calculateLinkBudget } from "@/lib/math/link-budget"
 
@@ -42,8 +43,10 @@ export interface ParamsSlice {
 export interface MapSlice {
   bbox: Bbox | null
   coverageGeoJson: GeoJSON.FeatureCollection | null
+  coverageImage: CoverageImageResult | null
   setBbox: (bbox: Bbox | null) => void
   setCoverageGeoJson: (gj: GeoJSON.FeatureCollection | null) => void
+  setCoverageImage: (img: CoverageImageResult | null) => void
 }
 
 /* ── UI slice ── */
@@ -55,11 +58,13 @@ export interface UISlice {
   sidebarOpen: boolean
   computing: boolean
   placing: boolean
+  colormap: string
   progress: { current: number; total: number; label: string } | null
   setMode: (mode: AppMode) => void
   setSidebarOpen: (open: boolean) => void
   setComputing: (v: boolean) => void
   setPlacing: (v: boolean) => void
+  setColormap: (v: string) => void
   setProgress: (p: { current: number; total: number; label: string } | null) => void
 }
 
@@ -173,21 +178,25 @@ export const useStore = create<AppStore>((set, get) => ({
   /* Map */
   bbox: null,
   coverageGeoJson: null,
+  coverageImage: null,
 
   setBbox: (bbox) => set({ bbox }),
   setCoverageGeoJson: (gj) => set({ coverageGeoJson: gj }),
+  setCoverageImage: (img) => set({ coverageImage: img }),
 
   /* UI */
   mode: "single",
   sidebarOpen: window.innerWidth >= 768,
   computing: false,
   placing: false,
+  colormap: 'plasma',
   progress: null,
 
   setMode: (mode) => set({ mode }),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setComputing: (v) => set({ computing: v }),
   setPlacing: (v) => set({ placing: v }),
+  setColormap: (v) => set({ colormap: v }),
   setProgress: (p) => set({ progress: p }),
 
   /* Results */

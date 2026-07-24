@@ -6,6 +6,7 @@ import { greedyMinSites } from "@/lib/optimize/greedy"
 import { buildCoverageMatrix } from "@/lib/optimize/matrix"
 import { warmStartMinSites } from "@/lib/optimize/warmstart"
 import { computeCoverageWithWorkers } from "@/workers/coverage-manager"
+import { coverageImage } from "@/lib/render/coverage-image"
 import type { CoverageRaster, OptimizationResult } from "@/lib/types"
 import { useStore } from "@/store"
 
@@ -47,9 +48,11 @@ export function ComputePanel() {
     greedyResult,
     improvement,
     error,
+    colormap,
     setComputing,
     setProgress,
     setCoverageGeoJson,
+    setCoverageImage,
     setCoverageResults,
     setOptimizationResult,
     setGreedyResult,
@@ -159,6 +162,16 @@ export function ComputePanel() {
         mask, combined.width, combined.height, combined.affine, 4,
       )
       setCoverageGeoJson(coverageGeoJson)
+
+      // Generate heatmap image overlay (colormapped, Mercator-corrected)
+      const img = coverageImage(combined, {
+        colormap,
+        minDbm: threshold - 30,
+        maxDbm: 0,
+        opacity: 0.7,
+        sensitivityDbm: threshold,
+      })
+      setCoverageImage(img)
 
       // ── Step 5: Build matrix ──
       setProgress({ current: 4, total: 4, label: "Optimising site selection…" })

@@ -21,7 +21,7 @@ export default function App() {
     sites, addSite, removeSite, clearSites,
     updateSitePosition,
     bbox, setBbox, setMode, toggleSiteSelection, selectedSiteNames,
-    coverageGeoJson, updateCoverageParams,
+    coverageImage, updateCoverageParams,
     placing, setPlacing,
   } = useStore()
 
@@ -163,7 +163,7 @@ export default function App() {
           <MeshMap
             sites={sites}
             selectedSiteNames={selectedSiteNames}
-            coverageGeoJson={coverageGeoJson ?? undefined}
+            coverageImage={coverageImage ?? undefined}
             bbox={bbox}
             onBboxSelect={setBbox}
             placing={placing}
