@@ -298,7 +298,7 @@ export function ComputePanel() {
       })
 
       // ── Step 7: Optional ILP background upgrade ──
-      const canUseIlp = !isMobileOrLowMemory()
+      const canUseIlp = false
 
       if (canUseIlp) {
         setOptimizationPhase("ilp-loading")
