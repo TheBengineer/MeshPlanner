@@ -23,7 +23,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
 
   /* Transmitter */
   const [txPower, setTxPower] = useState(22)
-  const [txHeight, setTxHeight] = useState(10)
+  const [txHeight, setTxHeight] = useState(1)
   const [txGain, setTxGain] = useState(3)
   const [cableLossTx, setCableLossTx] = useState(0.5)
 
