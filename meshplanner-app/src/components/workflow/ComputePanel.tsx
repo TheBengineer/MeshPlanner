@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react"
+import { useCallback, useRef, useState, useEffect } from "react"
 import { combineCoverage, combineAtThreshold } from "@/lib/combine/union"
 import { fetchDemRaster } from "@/lib/dem/fetch"
 import { downloadCsv, downloadGeoJson, rasterToCoverageGeoJson } from "@/lib/export/geojson"
@@ -71,6 +71,27 @@ export function ComputePanel() {
   const computeInFlight = useRef(false)
   const errorRef = useRef<HTMLDivElement>(null)
   const statusRef = useRef<HTMLDivElement>(null)
+  const startTimeRef = useRef(0)
+  const [elapsed, setElapsed] = useState(0)
+  const [ramMb, setRamMb] = useState(0)
+
+  /* Timer + RAM polling during computation. */
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    if (computing) {
+      startTimeRef.current = performance.now()
+      setElapsed(0)
+      timerRef.current = setInterval(() => {
+        setElapsed(Math.floor((performance.now() - startTimeRef.current) / 1000))
+        const m = (performance as any).memory
+        if (m) setRamMb(Math.round(m.usedJSHeapSize / (1024 * 1024)))
+      }, 500)
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [computing])
 
   const handleRetry = useCallback(() => {
     setError(null)
@@ -429,28 +450,26 @@ export function ComputePanel() {
       </div>
 
       {/* ── Progress bar (DEM/coverage/combine) ── */}
-      {computing && progress && optimizationPhase === "computing" && (
-        <div
-          style={{ marginTop: 8, fontSize: 12, color: "var(--text-secondary)" }}
-          role="status"
-          aria-live="polite"
-          aria-label={progress.label}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{
-              display: "inline-block",
-              width: 12, height: 12,
-              border: "2px solid var(--accent)",
-              borderTopColor: "transparent",
-              borderRadius: "50%",
-              animation: "spin 0.8s linear infinite",
-              role: "img",
-              "aria-label": "Computing",
-            } as React.CSSProperties & { role: string }} />
-            <span>{progress.label}</span>
+      {computing && progress && optimizationPhase === "computing" && (() => {
+        const pct = progress.total > 0 ? Math.min(100, Math.round((progress.current / progress.total) * 100)) : 0
+        const eta = pct > 0 && elapsed > 0 ? Math.round(elapsed / pct * (100 - pct)) : 0
+        return (
+          <div style={{ marginTop: 8 }} role="status" aria-live="polite" aria-label={progress.label}>
+            <div style={{ height: 8, background: 'var(--bg-secondary)', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 4, transition: 'width 0.3s' }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+              <span>{progress.label}</span>
+              <span>{pct}%</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>
+              <span>{elapsed}s elapsed</span>
+              <span>{eta > 0 ? `${eta}s remaining` : ''}</span>
+              <span>{ramMb > 0 ? `${ramMb} MB` : ''}</span>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── Greedy / ILP-loading status ── */}
       {(optimizationPhase === "greedy" || optimizationPhase === "ilp-loading") && (
