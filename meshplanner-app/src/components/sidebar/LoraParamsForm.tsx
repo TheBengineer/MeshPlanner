@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { calculateLinkBudget, SF_SENSITIVITY, BAND_CENTERS } from '@/lib/math/link-budget'
 import type { LoraParams } from '@/lib/types'
+import { useStore } from '@/store'
 
 const CLIMATE_CODES: Record<number, string> = {
   1: 'Equatorial',
@@ -181,6 +182,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
           Cable Loss (dB)
           <input type="number" min={0} step={0.1} value={cableLossTx} onChange={e => setCableLossTx(Number(e.target.value))} style={{ marginLeft: 8, width: 70 }} aria-label="TX cable loss" />
         </label>
+        <button type="button" onClick={() => useStore.getState().triggerCenterOnSite()} style={{ width: '100%', padding: '4px 8px', marginBottom: 6, fontSize: 12 }}>Center on site</button>
         <div style={{ marginTop: 6, padding: 6, background: 'var(--bg-secondary)', borderRadius: 4, fontSize: 12, border: '1px solid var(--border)', color: 'var(--text)' }}>
           <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-h)' }}>Link Budget (140 dB loss)</div>
           <div>EIRP: {budget.txEirpDbm} dBm | RX: {budget.rxPowerDbm} dBm</div>

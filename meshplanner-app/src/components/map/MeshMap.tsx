@@ -112,6 +112,16 @@ export function MeshMap({
     if (initialised && autoBbox) setBbox(autoBbox)
   }, [autoBbox, setBbox, initialised])
 
+  /* ── Center on site when triggerCenterOnSite is called ── */
+  const centerOnSite = useStore((s) => s.centerOnSite)
+  const sitesStore = useStore((s) => s.sites)
+  const selectedNames = useStore((s) => s.selectedSiteNames)
+  useEffect(() => {
+    if (centerOnSite === 0) return
+    const first = sitesStore.find((s) => selectedNames.includes(s.name)) ?? sitesStore[0]
+    if (first) mapRef.current?.getMap()?.flyTo({ center: [first.longitude, first.latitude], zoom: Math.max(viewport.zoom, 9) })
+  }, [centerOnSite]) // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── Coverage heatmap image overlay ── */
   const prevCoverageImgRef = useRef<CoverageImageResult | null>(null)
   useEffect(() => {
