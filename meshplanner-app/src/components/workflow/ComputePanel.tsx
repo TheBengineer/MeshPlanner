@@ -74,6 +74,7 @@ export function ComputePanel() {
   const startTimeRef = useRef(0)
   const [elapsed, setElapsed] = useState(0)
   const [ramMb, setRamMb] = useState(0)
+  const [demPct, setDemPct] = useState(0)
 
   /* Timer + RAM polling during computation. */
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -153,7 +154,8 @@ export function ComputePanel() {
       let dem
       try {
         dem = await fetchDemRaster(demBbox, (pct) => {
-          setProgress({ current: 0, total: 4, label: `DEM: ${pct}%` })
+          setDemPct(pct)
+          setProgress({ current: 0, total: 4, label: `Fetching DEM tiles…` })
         }, demZoom)
       } catch (demErr) {
         const msg = demErr instanceof Error ? demErr.message : "Unknown DEM error"
@@ -451,7 +453,14 @@ export function ComputePanel() {
 
       {/* ── Progress bar (DEM/coverage/combine) ── */}
       {computing && progress && optimizationPhase === "computing" && (() => {
-        const pct = progress.total > 0 ? Math.min(100, Math.round((progress.current / progress.total) * 100)) : 0
+        // Step 0 (DEM): progress.current=0, demPct 0-100 fills the first 25%
+        // Steps 1-4: progress.current/total fills proportionally
+        let pct: number
+        if (progress.total <= 4 && progress.current === 0 && demPct > 0) {
+          pct = Math.round((demPct / 100) * 25)
+        } else {
+          pct = progress.total > 0 ? Math.min(100, Math.round((progress.current / progress.total) * 100)) : 0
+        }
         const eta = pct > 0 && elapsed > 0 ? Math.round(elapsed / pct * (100 - pct)) : 0
         return (
           <div style={{ marginTop: 8 }} role="status" aria-live="polite" aria-label={progress.label}>
