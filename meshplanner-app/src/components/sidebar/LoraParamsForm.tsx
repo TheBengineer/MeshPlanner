@@ -124,7 +124,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOptimizationOpen(v => !v) } }}
         aria-expanded={optimizationOpen}
         aria-label="Toggle optimization settings"
-        style={{ marginTop: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer', userSelect: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid var(--border)', fontWeight: 600, fontSize: 13, cursor: 'pointer', userSelect: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
       >
         Optimization
         <span style={{ transition: 'transform 0.2s', transform: optimizationOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} aria-hidden="true">▶</span>
