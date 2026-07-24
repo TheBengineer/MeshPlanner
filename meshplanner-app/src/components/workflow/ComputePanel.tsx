@@ -212,6 +212,14 @@ export function ComputePanel() {
             demAffine,
           })
 
+          console.log('[ALIGN] DEM affine:', { a: demAffine.a, c: demAffine.c, f: demAffine.f, e: demAffine.e })
+          console.log('[ALIGN] DEM bounds:', {
+            north: demAffine.f, south: demAffine.f + dem.height * demAffine.e,
+            west: demAffine.c, east: demAffine.c + dem.width * demAffine.a,
+          })
+          console.log('[ALIGN] Result bounds:', result.bounds)
+          console.log('[ALIGN] Result size:', `${result.width}x${result.height}`)
+
           // Convert CoverageResult to CoverageRaster, sampled onto DEM grid
           // Use bilinear interpolation between SPLAT! pixels for smooth transitions
           const splatPixelLon = (result.bounds.east - result.bounds.west) / result.width
