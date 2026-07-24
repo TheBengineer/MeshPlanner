@@ -202,17 +202,15 @@ function buildPages(
 
     for (let r = 0; r < ippd; r++) {
       for (let c = 0; c < ippd; c++) {
-        // SPLAT! find_page returns x=0 for south, x=ippd-1 for north.
-        // Store rows south→north so page[0]=south terrain.
+        // SPLAT! find_page returns x=0 for south, x=ippd-1 for north
+        // and y=0 for east, y=ippd-1 for west.  Store rows south→north
+        // and columns east→west so page[0]=south-east, page[end]=north-west.
         const lat = ref.minNorth + (r + 0.5) * latStep
         const lon = pageWest + (c + 0.5) * lonStep
         let col = (lon - demAffine.c) / demAffine.a
         let row = (lat - demAffine.f) / demAffine.e
-        // Clamp to DEM edges so we never sample outside (avoids 0-elevation
-        // artifacts at page boundaries that would create artificial flat terrain).
         col = Math.max(0, Math.min(col, demWidth - 1))
         row = Math.max(0, Math.min(row, demHeight - 1))
-        // Bilinear interpolation
         const col0 = Math.floor(col); const row0 = Math.floor(row)
         const col1 = Math.min(col0 + 1, demWidth - 1)
         const row1 = Math.min(row0 + 1, demHeight - 1)
@@ -221,11 +219,12 @@ function buildPages(
         const v10 = demData[row0 * demWidth + col1]
         const v01 = demData[row1 * demWidth + col0]
         const v11 = demData[row1 * demWidth + col1]
-        // Guard against no-data values (SRTM uses -32768 for voids)
         const safe = (v: number | undefined) => (v !== undefined && Number.isFinite(v) && v > -10000) ? v : 0
         const a = safe(v00), b = safe(v10), c2 = safe(v01), d = safe(v11)
         const elev = a + (b - a) * fx + (c2 - a) * fy + (d - b - c2 + a) * fx * fy
-        page[r * ippd + c] = Math.round(Number.isFinite(elev) ? Math.max(-500, Math.min(9000, elev)) : 0)
+        // Store columns reversed: c=0 (west) → page index ippd-1 (SPLAT!'s east)
+        const sc = ippd - 1 - c
+        page[r * ippd + sc] = Math.round(Number.isFinite(elev) ? Math.max(-500, Math.min(9000, elev)) : 0)
       }
     }
     return page
@@ -359,7 +358,10 @@ export class WasmCoverageEngine implements CoverageEngine {
               for (let pc = 0; pc < ippd; pc++) {
                 const c = pcOffset + pc
                 if (c < 0 || c >= reg.width) continue
-                const el = pg[pr * ippd + pc]!
+                // Columns are stored east→west (sc=0=east).  Reverse when
+                // reading so pc=0 (west page column) maps to output column c.
+                const sc = ippd - 1 - pc
+                const el = pg[pr * ippd + sc]!
                 dbm[r * reg.width + c] = el
                 if (el < minEl) minEl = el
                 if (el > maxEl) maxEl = el
