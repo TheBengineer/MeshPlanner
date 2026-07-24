@@ -195,8 +195,8 @@ function buildPages(
     const pageNorth = ref.minNorth + 1
     // SPLAT! uses west-positive longitude 0-359; convert to signed by negating
     // (all our pages are in the western hemisphere so west-positive <= 180).
-    const pageWest = -ref.minWest
-    const pageEast = pageWest + 1
+    const pageWest = -(ref.minWest + 1) // west edge in signed degrees
+    const pageEast = -ref.minWest       // east edge in signed degrees
     const latStep = 1 / ippd
     const lonStep = 1 / ippd
 
@@ -299,7 +299,33 @@ export class WasmCoverageEngine implements CoverageEngine {
       /* ── Terrain: build Int16Array pages from DEM ── */
       const pages = buildPages(refs, demData, demWidth, demHeight, demAffine, ippd)
       report({ phase: 'terrain', completed: refs.length, total: refs.length, fraction: TERRAIN_SPAN })
-      report({ phase: 'terrain', completed: refs.length, total: refs.length, fraction: TERRAIN_SPAN })
+
+      // Debug: check ground elevation at transmitter from the built pages
+      console.log(`[SPLAT] Pages: ${pages.length}, refs: ${refs.length}, TX: ${params.lat.toFixed(4)},${params.lon.toFixed(4)}`)
+      for (let i = 0; i < refs.length; i++) {
+        const ref = refs[i]!
+        const pgWest = -(ref.minWest + 1)  // west edge in signed degrees
+        const pgEast = -ref.minWest         // east edge
+        console.log(`[SPLAT] Page ${i}: N=${ref.minNorth} W=${ref.minWest}, lon range: ${pgWest} to ${pgEast}`)
+        if (params.lat >= ref.minNorth && params.lat < ref.minNorth + 1 && params.lon >= pgWest && params.lon < pgEast) {
+          const pg = pages[i]
+          console.log(`[SPLAT] Found matching page ${i}, has data: ${!!pg}`)
+          if (pg) {
+            const pc = Math.round((params.lon - pgWest) * ippd)
+            const pr = Math.round((ref.minNorth + 1 - params.lat) * ippd)
+            console.log(`[SPLAT] Page pixel: ${pc},${pr} (ippd=${ippd})`)
+            if (pc >= 0 && pc < ippd && pr >= 0 && pr < ippd) {
+              const groundM = pg[pr * ippd + pc]
+              console.log(`[SPLAT] Raw page value: ${groundM}`)
+              if (groundM !== undefined && groundM > -500) {
+                const aglM = params.txHeightM
+                console.log(`[SPLAT] TX ground: ${groundM}m, AGL: ${aglM}m, Total ASL: ${groundM + aglM}m`)
+              }
+            }
+          }
+          break
+        }
+      }
       opts.signal?.throwIfAborted()
 
       /* ── Compute: main-thread SPLAT! using EngineContext (no workers) ── */
@@ -309,16 +335,6 @@ export class WasmCoverageEngine implements CoverageEngine {
           const data = pages[i]
           if (data) ctx.loadPage(i, data)
         }
-
-        // Debug: check elevation at transmitter position
-        const ppd = 1 / ippd
-        const txCol = Math.round((params.lon - region.west) / ppd)
-        const txRow = Math.round((region.north - params.lat) / ppd)
-        console.log(`[SPLAT] TX pixel: col=${txCol}, row=${txRow}, region: ${region.west.toFixed(4)},${region.south.toFixed(4)} ${region.east.toFixed(4)},${region.north.toFixed(4)}`)
-        // Count valid vs NaN pixels in signal output to check if terrain is used
-        const checkCount = Math.min(10000, region.width * region.height)
-        let validSignal = 0, zeroSignal = 0
-        // We'll check after rasterize
 
         const totalRadials = ctx.radialCount()
         const chunk = 32
