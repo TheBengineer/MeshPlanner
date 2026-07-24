@@ -73,7 +73,7 @@ class EngineContext {
       p.groundPermittivity, p.groundConductivity,
       p.surfaceRefractivity,
       p.climate, p.polarization,
-      0.5, 0.5, 0, // conf, rel, clutterHeight
+      p.conf ?? 0.95, p.rel ?? 0.95, p.clutterHeightM ?? 1.0,
       p.radiusKm,
       1200, // resolution IPPD
     )
@@ -205,23 +205,26 @@ function buildPages(
       for (let c = 0; c < ippd; c++) {
         const lat = pageNorth - (r + 0.5) * latStep
         const lon = pageWest + (c + 0.5) * lonStep
-        const col = (lon - demAffine.c) / demAffine.a
-        const row = (lat - demAffine.f) / demAffine.e
-        // Bilinear interpolation into our DEM
+        let col = (lon - demAffine.c) / demAffine.a
+        let row = (lat - demAffine.f) / demAffine.e
+        // Clamp to DEM edges so we never sample outside (avoids 0-elevation
+        // artifacts at page boundaries that would create artificial flat terrain).
+        col = Math.max(0, Math.min(col, demWidth - 1))
+        row = Math.max(0, Math.min(row, demHeight - 1))
+        // Bilinear interpolation
         const col0 = Math.floor(col); const row0 = Math.floor(row)
         const col1 = Math.min(col0 + 1, demWidth - 1)
         const row1 = Math.min(row0 + 1, demHeight - 1)
-        if (col0 < 0 || col1 >= demWidth || row0 < 0 || row1 >= demHeight) {
-          page[r * ippd + c] = 0 // ocean/outside DEM
-          continue
-        }
         const fx = col - col0; const fy = row - row0
-        const v00 = demData[row0 * demWidth + col0] ?? 0
-        const v10 = demData[row0 * demWidth + col1] ?? 0
-        const v01 = demData[row1 * demWidth + col0] ?? 0
-        const v11 = demData[row1 * demWidth + col1] ?? 0
-        const elev = v00 + (v10 - v00) * fx + (v01 - v00) * fy + (v11 - v10 - v01 + v00) * fx * fy
-        page[r * ippd + c] = Math.round(Number.isFinite(elev) ? elev : 0)
+        const v00 = demData[row0 * demWidth + col0]
+        const v10 = demData[row0 * demWidth + col1]
+        const v01 = demData[row1 * demWidth + col0]
+        const v11 = demData[row1 * demWidth + col1]
+        // Guard against no-data values (SRTM uses -32768 for voids)
+        const safe = (v: number | undefined) => (v !== undefined && Number.isFinite(v) && v > -10000) ? v : 0
+        const a = safe(v00), b = safe(v10), c2 = safe(v01), d = safe(v11)
+        const elev = a + (b - a) * fx + (c2 - a) * fy + (d - b - c2 + a) * fx * fy
+        page[r * ippd + c] = Math.round(Number.isFinite(elev) ? Math.max(-500, Math.min(9000, elev)) : 0)
       }
     }
     return page

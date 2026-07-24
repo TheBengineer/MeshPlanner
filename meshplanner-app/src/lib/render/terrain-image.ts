@@ -17,15 +17,20 @@ export function terrainImage(
   height: number,
   affine: { a: number; c: number; f: number; e: number },
 ): TerrainImageResult {
-  // Find elevation range from the DEM
-  let minEl = Infinity, maxEl = -Infinity
+  // Collect valid elevations and find range using percentiles (exclude outliers)
+  const valid: number[] = []
   for (let i = 0; i < width * height; i++) {
     const v = demData[i]
     if (v !== undefined && Number.isFinite(v) && v > -10000) {
-      if (v < minEl) minEl = v
-      if (v > maxEl) maxEl = v
+      valid.push(v)
     }
   }
+  valid.sort((a, b) => a - b)
+  // Use 2nd and 98th percentile to avoid outliers (ocean at 0m, spurious peaks)
+  const p2 = valid.length > 10 ? valid[Math.floor(valid.length * 0.02)]! : (valid[0] ?? 0)
+  const p98 = valid.length > 10 ? valid[Math.floor(valid.length * 0.98)]! : (valid[valid.length - 1] ?? 1)
+  const minEl = p2
+  const maxEl = p98
   const span = maxEl > minEl ? maxEl - minEl : 1
   const lut = colormapLut('viridis')
 

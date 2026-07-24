@@ -22,6 +22,9 @@ export interface EngineRunParams {
   surfaceRefractivity: number
   radiusKm: number
   numRadials: number
+  conf?: number
+  rel?: number
+  clutterHeightM?: number
 }
 
 export interface RegionInfo {
