@@ -53,7 +53,8 @@ export function coverageImage(
   const alpha = Math.round(255 * opacity)
 
   // Pixel-geometry from affine
-  const pixelDeg = Math.abs(affine.a) // degrees per pixel (lon)
+  const pixelDegLon = Math.abs(affine.a)  // degrees per pixel (lon)
+  const pixelDegLat = Math.abs(affine.e)  // degrees per pixel (lat)
   const north = affine.f
   const west = affine.c
   const south = affine.f + height * affine.e // affine.e is negative
@@ -83,7 +84,7 @@ export function coverageImage(
   for (let r = 0; r < height; r++) {
     const y = yN + ((r + 0.5) / height) * (yS - yN)
     const lat = latFromMercatorY(y)
-    let srcRow = Math.floor((north - lat) / pixelDeg)
+    let srcRow = Math.floor((north - lat) / pixelDegLat)
     if (srcRow < 0) srcRow = 0
     if (srcRow >= height) srcRow = height - 1
     out.set(srcRGBA.subarray(srcRow * rowBytes, (srcRow + 1) * rowBytes), r * rowBytes)

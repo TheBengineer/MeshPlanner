@@ -38,7 +38,8 @@ export function terrainImage(
   const west = affine.c
   const south = affine.f + height * affine.e
   const east = affine.c + width * affine.a
-  const pixelDeg = Math.abs(affine.a)
+  const pixelDegLon = Math.abs(affine.a)
+  const pixelDegLat = Math.abs(affine.e)
 
   // Colorize
   const srcRGBA = new Uint8ClampedArray(width * height * 4)
@@ -69,7 +70,7 @@ export function terrainImage(
   for (let r = 0; r < height; r++) {
     const y = yN + ((r + 0.5) / height) * (yS - yN)
     const lat = latFromMercatorY(y)
-    let srcRow = Math.floor((north - lat) / pixelDeg)
+    let srcRow = Math.floor((north - lat) / pixelDegLat)
     if (srcRow < 0) srcRow = 0
     if (srcRow >= height) srcRow = height - 1
     out.set(srcRGBA.subarray(srcRow * rowBytes, (srcRow + 1) * rowBytes), r * rowBytes)
