@@ -211,14 +211,15 @@ export const useStore = create<AppStore>((set, get) => ({
 
   setSetting: (key, value) =>
     set((s) => {
-      // Update settings map and sync to the appropriate typed field
       const settings = { ...s.settings, [key]: value }
-      // Check if it's a LoraParams field
       const loraKeys: (keyof LoraParams)[] = ['frequencyMhz', 'spreadingFactor', 'txPowerDbm', 'txHeightM', 'rxHeightM', 'txAntennaGainDbi', 'rxAntennaGainDbi', 'rxSensitivityDbm', 'bandwidthHz', 'requiredMarginDb', 'cableLossTxDb', 'cableLossRxDb', 'climate', 'polarization', 'groundPermittivity', 'groundConductivity', 'surfaceRefractivity']
       if ((loraKeys as string[]).includes(key)) {
         return { settings, params: { ...s.params, [key]: value }, linkBudget: null }
       }
-      // Otherwise treat it as a coverage param
+      // UISlice fields live outside coverageParams
+      if (key === 'colormap') return { settings, colormap: value }
+      if (key === 'showTerrain') return { settings, showTerrain: value }
+      // Everything else → coverageParams
       return { settings, coverageParams: { ...s.coverageParams, [key]: value } }
     }),
 
