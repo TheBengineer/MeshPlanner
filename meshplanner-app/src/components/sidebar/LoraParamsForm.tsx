@@ -19,7 +19,7 @@ interface LoraParamsFormProps {
 export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
   const [band, setBand] = useState('US915')
   const [sf, setSf] = useState(10)
-  const [txPower, setTxPower] = useState(20)
+  const [txPower, setTxPower] = useState(22)
   const [txHeight, setTxHeight] = useState(10)
   const [maxRange, setMaxRange] = useState(30)
   const [threshold, setThreshold] = useState(-120)
@@ -90,10 +90,10 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
         <input type="range" min={-150} max={-80} value={threshold} onChange={e => setThreshold(Number(e.target.value))} style={{ width: '100%' }} aria-label="RSSI threshold in dBm" />
       </div>
       
-      <div style={{ marginTop: 8, padding: 6, background: '#f0f0f0', borderRadius: 4, fontSize: 12 }}>
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>Link Budget (140 dB loss)</div>
+      <div style={{ marginTop: 8, padding: 6, background: 'var(--bg-secondary)', borderRadius: 4, fontSize: 12, border: '1px solid var(--border)', color: 'var(--text)' }}>
+        <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-h)' }}>Link Budget (140 dB loss)</div>
         <div>EIRP: {budget.txEirpDbm} dBm | RX: {budget.rxPowerDbm} dBm</div>
-        <div>Margin: <span style={{ color: budget.isFeasible ? 'green' : 'red', fontWeight: 600 }}>{budget.marginDb} dB</span></div>
+        <div>Margin: <span style={{ color: budget.isFeasible ? 'var(--accent)' : '#ef4444', fontWeight: 600 }}>{budget.marginDb} dB</span></div>
       </div>
 
       <div style={{ marginTop: 8 }}>
@@ -112,7 +112,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
       </div>
       
       {/* Advanced ITM Parameters — collapsible */}
-      <div style={{ marginTop: 8, borderTop: '1px solid #ddd', paddingTop: 6 }}>
+      <div style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
         <div
           role="button"
           tabIndex={0}

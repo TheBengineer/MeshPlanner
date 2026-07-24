@@ -25,9 +25,9 @@ const primaryBtn = (disabled: boolean): React.CSSProperties => ({
   padding: "8px 12px",
   fontWeight: 600,
   fontSize: 13,
-  background: disabled ? "#ccc" : "#1a73e8",
-  color: "#fff",
-  border: "none",
+  background: disabled ? "var(--bg-secondary)" : "var(--accent)",
+  color: disabled ? "var(--text-secondary)" : "#fff",
+  border: disabled ? "1px solid var(--border)" : "none",
   borderRadius: 4,
   cursor: disabled ? "not-allowed" : "pointer",
 })
@@ -294,7 +294,7 @@ export function ComputePanel() {
   const disableButton = computing || !bbox || selectedSiteNames.length === 0
 
   return (
-    <div style={{ borderTop: "1px solid #ddd", padding: "8px" }}>
+    <div style={{ borderTop: "1px solid var(--border)", padding: "8px" }}>
 
       {/* ── Compute button ── */}
       <button
@@ -312,7 +312,7 @@ export function ComputePanel() {
       {/* ── Progress bar (DEM/coverage/combine) ── */}
       {computing && progress && optimizationPhase === "computing" && (
         <div
-          style={{ marginTop: 8, fontSize: 12, color: "#555" }}
+          style={{ marginTop: 8, fontSize: 12, color: "var(--text-secondary)" }}
           role="status"
           aria-live="polite"
           aria-label={progress.label}
@@ -321,7 +321,7 @@ export function ComputePanel() {
             <span style={{
               display: "inline-block",
               width: 12, height: 12,
-              border: "2px solid #1a73e8",
+              border: "2px solid var(--accent)",
               borderTopColor: "transparent",
               borderRadius: "50%",
               animation: "spin 0.8s linear infinite",
@@ -347,16 +347,18 @@ export function ComputePanel() {
           }
           style={{
             marginTop: 8, padding: "6px 8px",
-            background: optimizationPhase === "ilp-loading" ? "#fff7ed" : "#f0fdf4",
+            background: "var(--bg-secondary)",
             borderRadius: 4, fontSize: 12,
             display: "flex", alignItems: "center", gap: 6,
+            border: "1px solid var(--border)",
+            color: "var(--text)",
           }}
         >
           {optimizationPhase === "ilp-loading" && (
             <span style={{
               display: "inline-block",
               width: 10, height: 10,
-              border: "2px solid #f97316",
+              border: "2px solid var(--accent)",
               borderTopColor: "transparent",
               borderRadius: "50%",
               animation: "spin 0.8s linear infinite",
@@ -365,7 +367,6 @@ export function ComputePanel() {
             } as React.CSSProperties & { role: string }} />
           )}
           <span style={{
-            color: optimizationPhase === "ilp-loading" ? "#9a3412" : "#166534",
             fontWeight: 500,
           }}>
             {optimizationPhase === "greedy"
@@ -386,10 +387,10 @@ export function ComputePanel() {
           tabIndex={-1}
           style={{
             marginTop: 8, padding: "8px 10px",
-            background: "#fef2f2", color: "#b91c1c",
+            background: "var(--bg-secondary)", color: "#fca5a5",
             borderRadius: 4, fontSize: 12,
             outline: "none",
-            border: "1px solid #fca5a5",
+            border: "1px solid #7f1d1d",
           }}
         >
           <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
@@ -400,7 +401,7 @@ export function ComputePanel() {
               aria-label="Dismiss error"
               style={{
                 background: "none", border: "none",
-                color: "#b91c1c", cursor: "pointer",
+                color: "#fca5a5", cursor: "pointer",
                 fontWeight: 600, fontSize: 14,
                 padding: "2px 4px",
                 lineHeight: 1,
@@ -418,9 +419,9 @@ export function ComputePanel() {
               style={{
                 marginTop: 6,
                 padding: "4px 12px",
-                background: "#b91c1c",
-                color: "#fff",
-                border: "none",
+                background: "#7f1d1d",
+                color: "#fca5a5",
+                border: "1px solid #991b1b",
                 borderRadius: 3,
                 cursor: "pointer",
                 fontWeight: 600,
@@ -441,9 +442,9 @@ export function ComputePanel() {
           aria-live="polite"
           style={{
             marginTop: 8, padding: "8px",
-            background: "#fef3c7", borderRadius: 4,
-            fontSize: 12, color: "#92400e",
-            border: "1px solid #fde68a",
+            background: "var(--bg-secondary)", borderRadius: 4,
+            fontSize: 12, color: "var(--text-secondary)",
+            border: "1px solid var(--border)",
           }}
         >
           No sites selected. The optimisation could not find a solution with the current settings.
@@ -460,25 +461,27 @@ export function ComputePanel() {
           aria-label="Coverage results"
           style={{
             marginTop: 8, padding: "8px",
-            background: "#f0fdf4", borderRadius: 4,
+            background: "var(--bg-secondary)", borderRadius: 4,
             fontSize: 12, outline: "none",
+            border: "1px solid var(--border)",
+            color: "var(--text)",
           }}
         >
-          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13, color: "#166534" }}>
+          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13, color: "var(--text-h)" }}>
             Coverage Results
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 8px" }}>
-            <span style={{ color: "#555" }}>Coverage:</span>
+            <span style={{ color: "var(--text-secondary)" }}>Coverage:</span>
             <span style={{ fontWeight: 600 }}>
               {(coverageResults.coveredFraction * 100).toFixed(1)}%
             </span>
-            <span style={{ color: "#555" }}>Selected sites:</span>
+            <span style={{ color: "var(--text-secondary)" }}>Selected sites:</span>
             <span style={{ fontWeight: 600 }}>{coverageResults.nSites}</span>
-            <span style={{ color: "#555" }}>Cells covered:</span>
+            <span style={{ color: "var(--text-secondary)" }}>Cells covered:</span>
             <span style={{ fontWeight: 600 }}>
               {coverageResults.coveredCells.toLocaleString()} / {coverageResults.totalCells.toLocaleString()}
             </span>
-            <span style={{ color: "#555" }}>Time:</span>
+            <span style={{ color: "var(--text-secondary)" }}>Time:</span>
             <span style={{ fontWeight: 600 }}>{coverageResults.computeTimeS.toFixed(1)}s</span>
           </div>
 
@@ -490,8 +493,9 @@ export function ComputePanel() {
               aria-label={`Improved by ILP: ${improvement} fewer site${improvement === 1 ? "" : "s"}`}
               style={{
                 marginTop: 6, padding: "4px 6px",
-                background: "#dbeafe", borderRadius: 3,
-                fontWeight: 600, fontSize: 12, color: "#1e40af",
+                background: "var(--bg)", borderRadius: 3,
+                fontWeight: 600, fontSize: 12, color: "var(--accent)",
+                border: "1px solid var(--border)",
               }}
             >
               Improved by ILP: {improvement} fewer site{improvement === 1 ? "" : "s"}!
@@ -506,8 +510,9 @@ export function ComputePanel() {
               aria-label="ILP solver unavailable, using greedy result"
               style={{
                 marginTop: 6, padding: "4px 6px",
-                background: "#fef3c7", borderRadius: 3,
-                fontWeight: 500, fontSize: 12, color: "#92400e",
+                background: "var(--bg)", borderRadius: 3,
+                fontWeight: 500, fontSize: 12, color: "var(--text-secondary)",
+                border: "1px solid var(--border)",
               }}
             >
               ILP unavailable — using greedy result
@@ -522,8 +527,9 @@ export function ComputePanel() {
               aria-label="Greedy solution only, ILP skipped on mobile"
               style={{
                 marginTop: 6, padding: "4px 6px",
-                background: "#fef3c7", borderRadius: 3,
-                fontWeight: 500, fontSize: 12, color: "#92400e",
+                background: "var(--bg)", borderRadius: 3,
+                fontWeight: 500, fontSize: 12, color: "var(--text-secondary)",
+                border: "1px solid var(--border)",
               }}
             >
               Greedy solution (ILP skipped on mobile)
@@ -534,20 +540,20 @@ export function ComputePanel() {
           {optimizationResult && (
             <div style={{
               fontWeight: 600, marginTop: 6, marginBottom: 2,
-              fontSize: 13, color: "#166534",
+              fontSize: 13, color: "var(--text-h)",
             }}>
               Optimisation
             </div>
           )}
           {optimizationResult && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 8px" }}>
-              <span style={{ color: "#555" }}>Solver:</span>
+              <span style={{ color: "var(--text-secondary)" }}>Solver:</span>
               <span style={{ fontWeight: 600 }}>{optimizationResult.source}</span>
-              <span style={{ color: "#555" }}>Status:</span>
+              <span style={{ color: "var(--text-secondary)" }}>Status:</span>
               <span style={{ fontWeight: 600 }}>{optimizationResult.status}</span>
               {optimizationResult.selectedSites.length <= 5 && (
                 <>
-                  <span style={{ color: "#555" }}>Sites:</span>
+                  <span style={{ color: "var(--text-secondary)" }}>Sites:</span>
                   <span style={{
                     fontWeight: 600, overflow: "hidden",
                     textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -569,7 +575,7 @@ export function ComputePanel() {
                 aria-label="Export results as GeoJSON"
                 style={{
                   flex: 1, padding: "4px 6px", fontSize: 11,
-                  background: "#fff", border: "1px solid #ddd",
+                  background: "var(--bg)", border: "1px solid var(--border)",
                   borderRadius: 3, cursor: "pointer",
                 }}
               >
@@ -582,7 +588,7 @@ export function ComputePanel() {
                 aria-label="Export results as CSV"
                 style={{
                   flex: 1, padding: "4px 6px", fontSize: 11,
-                  background: "#fff", border: "1px solid #ddd",
+                  background: "var(--bg)", border: "1px solid var(--border)",
                   borderRadius: 3, cursor: "pointer",
                 }}
               >

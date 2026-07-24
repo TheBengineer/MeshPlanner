@@ -31,15 +31,9 @@ export function SiteForm({ onAddSite }: SiteFormProps) {
         required
         aria-label="Site name"
       />
-      <input
-        data-testid="site-lat-input"
-        placeholder="Latitude"
-        value={lat}
-        onChange={e => setLat(e.target.value)}
-        size={8}
-        required
-        aria-label="Site latitude"
-      />
+      <button data-testid="site-add-btn" type="submit" aria-label="Add site" style={{ fontSize: 12 }}>
+        + Add
+      </button>
       <input
         data-testid="site-lon-input"
         placeholder="Longitude"
@@ -49,9 +43,15 @@ export function SiteForm({ onAddSite }: SiteFormProps) {
         required
         aria-label="Site longitude"
       />
-      <button data-testid="site-add-btn" type="submit" aria-label="Add site" style={{ fontSize: 12 }}>
-        + Add
-      </button>
+      <input
+        data-testid="site-lat-input"
+        placeholder="Latitude"
+        value={lat}
+        onChange={e => setLat(e.target.value)}
+        size={8}
+        required
+        aria-label="Site latitude"
+      />
     </form>
   )
 }
