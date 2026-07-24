@@ -2,7 +2,7 @@ import { openDB } from 'idb'
 import type { IDBPDatabase } from 'idb'
 
 const DB_NAME = 'meshplanner-dem-cache'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE_NAME = 'tiles'
 
 let dbPromise: Promise<IDBPDatabase> | null = null
@@ -10,26 +10,39 @@ let dbPromise: Promise<IDBPDatabase> | null = null
 async function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
           db.createObjectStore(STORE_NAME)
         }
+        // Version 2 stores structured objects instead of JSON strings —
+        // the old string store is dropped automatically since we use the
+        // same store name; stale string entries will fail the shape check
+        // in the caller and be replaced on next fetch.
       },
     })
   }
   return dbPromise
 }
 
-export async function getFromCache(key: string): Promise<string | undefined> {
+export interface CachedTile {
+  data: Float32Array
+  width: number
+  height: number
+}
+
+export async function getFromCache(key: string): Promise<CachedTile | undefined> {
   try {
     const db = await getDb()
-    return await db.get(STORE_NAME, key)
+    const raw = await db.get(STORE_NAME, key)
+    // Version-compat: old stores used JSON strings — reject them.
+    if (!raw || typeof raw === 'string' || !(raw.data instanceof Float32Array)) return undefined
+    return raw as CachedTile
   } catch {
     return undefined
   }
 }
 
-export async function storeInCache(key: string, value: string): Promise<void> {
+export async function storeInCache(key: string, value: CachedTile): Promise<void> {
   try {
     const db = await getDb()
     await db.put(STORE_NAME, value, key)

@@ -162,22 +162,15 @@ export async function fetchDemRaster(
         const cached = await getFromCache(cacheKey)
         let tile: DemTile | null = null
         if (cached) {
-          const parsed = JSON.parse(cached)
-          // Recompute affine from TMS coords — old cached tiles have wrong
-          // GeoTIFF tiepoints. Keep the raw elevation data only.
           const bounds = tmsTileBounds(zoom, x, y)
-          const w = parsed.width as number
-          const h = parsed.height as number
           tile = {
-            data: parsed.data,
-            width: w, height: h,
-            affine: { a: (bounds.east - bounds.west) / w, b: 0, c: bounds.west, d: 0, e: -(bounds.north - bounds.south) / h, f: bounds.north },
+            data: cached.data,
+            width: cached.width, height: cached.height,
+            affine: { a: (bounds.east - bounds.west) / cached.width, b: 0, c: bounds.west, d: 0, e: -(bounds.north - bounds.south) / cached.height, f: bounds.north },
           }
         } else {
           tile = await fetchTile(url, zoom, x, y)
-          // Store raw elevation data only (affine is computed from TMS)
-          const { data, width, height } = tile
-          await storeInCache(cacheKey, JSON.stringify({ data, width, height }))
+          await storeInCache(cacheKey, { data: tile.data, width: tile.width, height: tile.height })
         }
         sampleTileIntoArray(demArray, width, height, demAffine, tile)
       } catch (err) {
