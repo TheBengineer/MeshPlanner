@@ -14,29 +14,25 @@ import type { CoverageImageResult } from '@/lib/render/coverage-image'
 import { useStore } from '@/store'
 
 /*
- * Compute the SPLAT! tile region from selected sites and max range.
- * Returns a bbox covering all integer-degree tiles SPLAT! will load.
+ * Compute the coverage-area bounding box from selected sites and max range.
+ * No tile snapping — responds to every range change. The DEM fetch in
+ * ComputePanel internally snaps to degree boundaries for SPLAT! pages.
  */
-function tileRegion(sites: { latitude: number; longitude: number }[], rangeKm: number): Bbox | null {
+function rangeBbox(sites: { latitude: number; longitude: number }[], rangeKm: number): Bbox | null {
   if (sites.length === 0) return null
   const degPerKm = 1 / 111.0
-  let minTileLat = Infinity, maxTileLat = -Infinity
-  let minTileLon = Infinity, maxTileLon = -Infinity
+  let minLat = Infinity, maxLat = -Infinity
+  let minLon = Infinity, maxLon = -Infinity
   for (const s of sites) {
     const dLat = rangeKm * degPerKm
     const cosLat = Math.cos(s.latitude * Math.PI / 180)
     const dLon = cosLat > 0.01 ? rangeKm * degPerKm / cosLat : rangeKm * degPerKm / 0.01
-    minTileLat = Math.min(minTileLat, Math.floor(s.latitude - dLat))
-    maxTileLat = Math.max(maxTileLat, Math.floor(s.latitude + dLat))
-    minTileLon = Math.min(minTileLon, Math.floor(s.longitude - dLon))
-    maxTileLon = Math.max(maxTileLon, Math.floor(s.longitude + dLon))
+    minLat = Math.min(minLat, s.latitude - dLat)
+    maxLat = Math.max(maxLat, s.latitude + dLat)
+    minLon = Math.min(minLon, s.longitude - dLon)
+    maxLon = Math.max(maxLon, s.longitude + dLon)
   }
-  return {
-    west: minTileLon,
-    south: minTileLat,
-    east: maxTileLon + 1,
-    north: maxTileLat + 1,
-  }
+  return { west: minLon, south: minLat, east: maxLon, north: maxLat }
 }
 
 interface MeshMapProps {
@@ -102,7 +98,7 @@ export function MeshMap({
     [sites, selectedSiteNames],
   )
   const autoBbox = useMemo(
-    () => tileRegion(selectedSites.length > 0 ? selectedSites : sites, maxRangeKm ?? 30),
+    () => rangeBbox(selectedSites.length > 0 ? selectedSites : sites, maxRangeKm ?? 30),
     [selectedSites, sites, maxRangeKm],
   )
   const [initialised, setInitialised] = useState(false)
