@@ -117,11 +117,20 @@ export function ComputePanel() {
       const demZoom = highRes ? 13 : 12
 
     try {
-      // ── Step 1: Fetch DEM ──
+      // ── Step 1: Fetch DEM covering full SPLAT! page area ──
+      // SPLAT! creates 1-degree terrain pages. The DEM must cover the
+      // degree-aligned tiles, not just the bbox, or narrow/tall bboxes
+      // produce pages with empty terrain data.
       setProgress({ current: 0, total: 4, label: "Fetching DEM tiles…" })
+      const demBbox = {
+        west: Math.floor(bbox.west),
+        south: Math.floor(bbox.south),
+        east: Math.ceil(bbox.east),
+        north: Math.ceil(bbox.north),
+      }
       let dem
       try {
-        dem = await fetchDemRaster(bbox, (pct) => {
+        dem = await fetchDemRaster(demBbox, (pct) => {
           setProgress({ current: 0, total: 4, label: `DEM: ${pct}%` })
         }, demZoom)
       } catch (demErr) {
