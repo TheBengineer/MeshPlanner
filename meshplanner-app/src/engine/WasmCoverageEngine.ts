@@ -1,0 +1,360 @@
+/* Ported from meshtastic-site-planner's WasmCoverageEngine.ts + core.ts.
+ *
+ * Uses the SPLAT! WASM module for ITM propagation:
+ *   Scout (enumerate pages) → Terrain (load pages) → Compute (workers)
+ *   → Merge first-touch → Finalize (convert to dBm)
+ */
+
+import createSplatModule from './generated/splat_driver.mjs'
+import type { SplatModule } from './generated/splat_driver.d'
+import type { CoverageEngine, CoverageProgress, CoverageResult, CoverageRunOptions } from './CoverageEngine'
+import type { EngineRunParams } from './core'
+import { mergeFirstTouch, sliceRadials, type WorkerRaster } from './merge'
+import type { DoneMessage, FromWorker, ToWorker } from './protocol'
+
+const RADIAL_CHUNK = 32
+const TERRAIN_SPAN = 0.15
+const COMPUTE_SPAN = 0.83
+const HD_HEAP_BUDGET_MB = 800
+const PAGE_MEMORY_BUDGET_MB = 768
+
+/* ── PageRef: a 1°×1° elevation tile in SPLAT!'s convention ── */
+
+interface PageRef {
+  minNorth: number
+  /** West-positive floor longitude (0-359). */
+  minWest: number
+}
+
+/* ── Region info from SPLAT! ── */
+
+interface RegionInfo {
+  width: number; height: number
+  north: number; south: number; east: number; west: number
+  radials: number; pages: number
+}
+
+/* ── EngineContext: wraps splat_* C functions ── */
+
+class EngineError extends Error {
+  constructor(code: number, what: string) {
+    const msgs: Record<number, string> = {
+      [-1]: 'out of memory', [-2]: 'bad handle', [-3]: 'bad page',
+      [-4]: 'coverage region too large', [-5]: 'invalid parameters',
+    }
+    super(`${what}: ${msgs[code] ?? `engine error ${code}`}`)
+    this.name = 'EngineError'
+  }
+}
+
+function check(rc: number, what: string): number {
+  if (rc < 0) throw new EngineError(rc, what)
+  return rc
+}
+
+class EngineContext {
+  private constructor(
+    private readonly m: SplatModule,
+    private handle: number,
+    readonly ippd: number,
+  ) {}
+
+  static create(m: SplatModule, p: EngineRunParams): EngineContext {
+    // Convert meters to feet (SPLAT! uses feet AGL)
+    const txAltFeet = p.txHeightM * 3.28084
+    const rxAltFeet = p.rxHeightM * 3.28084
+    // Convert dBm to ERP watts: P(W) = 10^((dBm - 30)/10)
+    const erpWatts = Math.pow(10, (p.txPowerDbm + p.txAntennaGainDbi - p.cableLossTxDb - 30) / 10)
+
+    const h = m._splat_create(
+      p.lat, p.lon,
+      txAltFeet, rxAltFeet,
+      p.frequencyMhz, erpWatts,
+      p.groundPermittivity, p.groundConductivity,
+      p.surfaceRefractivity,
+      p.climate, p.polarization,
+      0.5, 0.5, 0, // conf, rel, clutterHeight
+      p.radiusKm,
+      1200, // resolution IPPD
+    )
+    check(h, 'splat_create')
+    return new EngineContext(m, h, 1200)
+  }
+
+  pages(): PageRef[] {
+    const count = check(this.m._splat_page_count(this.handle), 'splat_page_count')
+    const out = this.m._splat_malloc(8)
+    try {
+      const refs: PageRef[] = []
+      for (let i = 0; i < count; i++) {
+        check(this.m._splat_page_info(this.handle, i, out), 'splat_page_info')
+        const base = out >> 2
+        refs.push({
+          minNorth: this.m.HEAP32[base]!,
+          minWest: this.m.HEAP32[base + 1]!,
+        })
+      }
+      return refs
+    } finally {
+      this.m._splat_free(out)
+    }
+  }
+
+  loadPage(index: number, data: Int16Array): void {
+    const cells = this.ippd * this.ippd
+    if (data.length !== cells)
+      throw new Error(`page ${index}: expected ${cells} cells, got ${data.length}`)
+    const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+    const ptr = this.m._splat_malloc(bytes.length)
+    if (!ptr) throw new Error('splat_malloc failed')
+    try {
+      this.m.HEAPU8.set(bytes, ptr)
+      check(this.m._splat_load_page(this.handle, index, ptr), 'splat_load_page')
+    } finally {
+      this.m._splat_free(ptr)
+    }
+  }
+
+  radialCount(): number {
+    return check(this.m._splat_radial_count(this.handle), 'splat_radial_count')
+  }
+
+  runRadials(start: number, count: number): number {
+    return check(this.m._splat_run_radials(this.handle, start, count), 'splat_run_radials')
+  }
+
+  rasterize(): void {
+    check(this.m._splat_rasterize(this.handle), 'splat_rasterize')
+  }
+
+  region(): RegionInfo {
+    const out = this.m._splat_malloc(8 * 8)
+    try {
+      check(this.m._splat_region_info(this.handle, out), 'splat_region_info')
+      const base = out >> 3
+      const v = this.m.HEAPF64
+      return {
+        width: v[base]!, height: v[base + 1]!,
+        north: v[base + 2]!, south: v[base + 3]!,
+        east: v[base + 4]!, west: v[base + 5]!,
+        radials: v[base + 6]!, pages: v[base + 7]!,
+      }
+    } finally {
+      this.m._splat_free(out)
+    }
+  }
+
+  signal(width: number, height: number): Uint8Array {
+    const ptr = this.m._splat_signal_ptr(this.handle)
+    if (!ptr) throw new Error('signal ptr not available')
+    return this.m.HEAPU8.slice(ptr, ptr + width * height)
+  }
+
+  mask(width: number, height: number): Uint8Array {
+    const ptr = this.m._splat_mask_ptr(this.handle)
+    if (!ptr) throw new Error('mask ptr not available')
+    return this.m.HEAPU8.slice(ptr, ptr + width * height)
+  }
+
+  errnumCounts(): number[] {
+    const out = this.m._splat_malloc(6 * 4)
+    try {
+      check(this.m._splat_errnum_counts(this.handle, out), 'splat_errnum_counts')
+      const base = out >> 2
+      return Array.from(this.m.HEAP32.subarray(base, base + 6))
+    } finally {
+      this.m._splat_free(out)
+    }
+  }
+
+  destroy(): void {
+    if (this.handle > 0) {
+      this.m._splat_destroy(this.handle)
+      this.handle = 0
+    }
+  }
+}
+
+/* ── Progress helper ── */
+
+function projectedHeapMB(pageCount: number, regionCells: number, ippd: number): number {
+  return (pageCount * ippd * ippd * 4 + regionCells * 2) / (1024 * 1024)
+}
+
+/* ── Terrain page provider: converts our DEM to SPLAT!'s Int16Array pages ── */
+
+function buildPages(
+  refs: PageRef[],
+  demData: Float32Array,
+  demWidth: number,
+  demHeight: number,
+  demAffine: { a: number; c: number; f: number; e: number },
+  ippd: number,
+): (Int16Array | null)[] {
+  return refs.map((ref) => {
+    const page = new Int16Array(ippd * ippd)
+    const pageNorth = ref.minNorth + 1
+    const pageWest = -(360 - ref.minWest) // convert from west-positive back to signed
+    const pageSouth = ref.minNorth
+    const pageEast = pageWest + 1
+    const latStep = 1 / ippd
+    const lonStep = 1 / ippd
+
+    for (let r = 0; r < ippd; r++) {
+      for (let c = 0; c < ippd; c++) {
+        const lat = pageNorth - (r + 0.5) * latStep
+        const lon = pageWest + (c + 0.5) * lonStep
+        const col = (lon - demAffine.c) / demAffine.a
+        const row = (lat - demAffine.f) / demAffine.e
+        // Bilinear interpolation into our DEM
+        const col0 = Math.floor(col); const row0 = Math.floor(row)
+        const col1 = Math.min(col0 + 1, demWidth - 1)
+        const row1 = Math.min(row0 + 1, demHeight - 1)
+        if (col0 < 0 || col1 >= demWidth || row0 < 0 || row1 >= demHeight) {
+          page[r * ippd + c] = 0 // ocean/outside DEM
+          continue
+        }
+        const fx = col - col0; const fy = row - row0
+        const v00 = demData[row0 * demWidth + col0] ?? 0
+        const v10 = demData[row0 * demWidth + col1] ?? 0
+        const v01 = demData[row1 * demWidth + col0] ?? 0
+        const v11 = demData[row1 * demWidth + col1] ?? 0
+        const elev = v00 + (v10 - v00) * fx + (v01 - v00) * fy + (v11 - v10 - v01 + v00) * fx * fy
+        page[r * ippd + c] = Math.round(Number.isFinite(elev) ? elev : 0)
+      }
+    }
+    return page
+  })
+}
+
+/* ── West-positive floor longitude conversion ── */
+
+function westPositiveFloor(lonSigned: number): number {
+  let wp = lonSigned < 0 ? -lonSigned : 360 - lonSigned
+  if (wp < 0) wp += 360
+  return Math.floor(wp)
+}
+
+/* ── WasmCoverageEngine ── */
+
+interface PoolWorker {
+  worker: Worker
+  handler: ((msg: FromWorker) => void) | null
+}
+
+export class WasmCoverageEngine implements CoverageEngine {
+  readonly kind = 'wasm-workers' as const
+
+  private modulePromise: Promise<SplatModule> | null = null
+  private workers: PoolWorker[] = []
+  private nextRunId = 1
+  private busy = false
+  private disposed = false
+
+  constructor() {}
+
+  async run(params: EngineRunParams, opts: CoverageRunOptions): Promise<CoverageResult> {
+    if (this.disposed) throw new Error('engine disposed')
+    if (this.busy) throw new Error('a simulation is already running')
+    this.busy = true
+    const started = performance.now()
+    try {
+      opts.signal?.throwIfAborted()
+
+      const { demData, demWidth, demHeight, demAffine } = opts
+      const report = (p: CoverageProgress) => opts.onProgress?.(p)
+
+      /* ── Scout: enumerate pages via SPLAT! ── */
+      const m = await this.getModule()
+      const scout = EngineContext.create(m, params)
+      let refs: PageRef[]
+      let region: RegionInfo
+      try {
+        refs = scout.pages()
+        region = scout.region()
+      } finally {
+        scout.destroy()
+      }
+
+      /* OOM guard */
+      if (projectedHeapMB(refs.length, region.width * region.height, 1200) > HD_HEAP_BUDGET_MB) {
+        throw new Error('Area too large for SPLAT! — reduce max range')
+      }
+
+      /* ── Terrain: build Int16Array pages from our DEM ── */
+      let tilesDone = 0
+      const pages = buildPages(refs, demData, demWidth, demHeight, demAffine, 1200)
+      report({ phase: 'terrain', completed: refs.length, total: refs.length, fraction: TERRAIN_SPAN })
+
+      opts.signal?.throwIfAborted()
+
+      /* ── Compute: single-thread (workers skip for now, use main-thread WASM) ── */
+      const ctx = EngineContext.create(m, params)
+      try {
+        for (let i = 0; i < refs.length; i++) {
+          const data = pages[i]
+          if (data) ctx.loadPage(i, data)
+        }
+
+        const totalRadials = ctx.radialCount()
+        const chunk = 32
+
+        for (let at = 0; at < totalRadials; ) {
+          opts.signal?.throwIfAborted()
+          const ran = ctx.runRadials(at, Math.min(chunk, totalRadials - at))
+          at += ran
+          report({ phase: 'compute', completed: at, total: totalRadials, fraction: TERRAIN_SPAN + (at / totalRadials) * COMPUTE_SPAN })
+        }
+
+        ctx.rasterize()
+        const reg = ctx.region()
+        const signal = ctx.signal(reg.width, reg.height)
+        const mask = ctx.mask(reg.width, reg.height)
+
+        /* ── Finalize: convert to dBm ── */
+        report({ phase: 'finalize', completed: 0, total: 1, fraction: TERRAIN_SPAN + COMPUTE_SPAN })
+        const cells = reg.width * reg.height
+        const dbm = new Float32Array(cells)
+        for (let i = 0; i < cells; i++) {
+          dbm[i] = (mask[i]! & 248) !== 0 ? signal[i]! - 200 : NaN
+        }
+
+        const itmWarnings = ctx.errnumCounts()
+        report({ phase: 'finalize', completed: 1, total: 1, fraction: 1 })
+
+        return {
+          dbm, width: reg.width, height: reg.height,
+          bounds: { north: reg.north, south: reg.south, east: reg.east, west: reg.west },
+          pixelDegrees: 1 / 1200,
+          stats: {
+            radials: totalRadials,
+            pages: refs.length,
+            pagesWithData: pages.filter((p) => p !== null).length,
+            itmWarnings,
+            elapsedMs: performance.now() - started,
+            workers: 1,
+          },
+        }
+      } finally {
+        ctx.destroy()
+      }
+    } finally {
+      this.busy = false
+    }
+  }
+
+  dispose(): void {
+    this.disposed = true
+    for (const pw of this.workers) pw.worker.terminate()
+    this.workers = []
+  }
+
+  private getModule(): Promise<SplatModule> {
+    if (!this.modulePromise) {
+      this.modulePromise = createSplatModule({
+        locateFile: (path: string) => new URL(`./generated/${path}`, import.meta.url).href,
+      }) as Promise<SplatModule>
+    }
+    return this.modulePromise
+  }
+}

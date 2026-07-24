@@ -39,7 +39,7 @@ export interface CoverageRunOptions {
 }
 
 export interface CoverageEngine {
-  readonly kind: 'js-workers'
+  readonly kind: 'js-workers' | 'wasm-workers'
   run(params: EngineRunParams, opts: CoverageRunOptions): Promise<CoverageResult>
   dispose(): void
 }
