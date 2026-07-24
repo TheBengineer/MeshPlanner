@@ -44,9 +44,11 @@ export interface MapSlice {
   bbox: Bbox | null
   coverageGeoJson: GeoJSON.FeatureCollection | null
   coverageImage: CoverageImageResult | null
+  viewport: { latitude: number; longitude: number; zoom: number }
   setBbox: (bbox: Bbox | null) => void
   setCoverageGeoJson: (gj: GeoJSON.FeatureCollection | null) => void
   setCoverageImage: (img: CoverageImageResult | null) => void
+  setViewport: (vp: { latitude: number; longitude: number; zoom: number }) => void
 }
 
 /* ── UI slice ── */
@@ -179,10 +181,12 @@ export const useStore = create<AppStore>((set, get) => ({
   bbox: null,
   coverageGeoJson: null,
   coverageImage: null,
+  viewport: { latitude: 35.6, longitude: -82.5, zoom: 10 },
 
   setBbox: (bbox) => set({ bbox }),
   setCoverageGeoJson: (gj) => set({ coverageGeoJson: gj }),
   setCoverageImage: (img) => set({ coverageImage: img }),
+  setViewport: (vp) => set({ viewport: vp }),
 
   /* UI */
   mode: "single",
