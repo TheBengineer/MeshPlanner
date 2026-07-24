@@ -23,14 +23,28 @@ export function BboxSelector({ bbox, onBboxChange }: BboxSelectorProps) {
   }, [bbox])
 
   const handleApply = () => {
-    const bbox: Bbox = {
-      west: parseFloat(west),
-      south: parseFloat(south),
-      east: parseFloat(east),
-      north: parseFloat(north),
-    }
-    if (bbox.west < bbox.east && bbox.south < bbox.north) {
-      onBboxChange(bbox)
+    // Snap to nearest integer degree tile using the midpoint of the inputs
+    const w = parseFloat(west)
+    const s = parseFloat(south)
+    const e2 = parseFloat(east)
+    const n = parseFloat(north)
+    if (w < e2 && s < n) {
+      const midLat = (s + n) / 2
+      const midLng = (w + e2) / 2
+      const snapped: Bbox = {
+        west: Math.floor(midLng),
+        south: Math.floor(midLat),
+        east: Math.ceil(midLng),
+        north: Math.ceil(midLat),
+      }
+      // Ensure 1°×1°
+      if (snapped.east - snapped.west > 1) snapped.east = snapped.west + 1
+      if (snapped.north - snapped.south > 1) snapped.north = snapped.south + 1
+      onBboxChange(snapped)
+      setWest(String(snapped.west))
+      setSouth(String(snapped.south))
+      setEast(String(snapped.east))
+      setNorth(String(snapped.north))
     }
   }
 

@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect } from 'react'
+import { useRef, useCallback, useState, useEffect, useMemo } from 'react'
 import Map, { Layer, Source, Marker } from 'react-map-gl/maplibre'
 import type {
   MapRef,
@@ -12,6 +12,13 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Bbox, CandidateSite } from '@/lib/types'
 import type { CoverageImageResult } from '@/lib/render/coverage-image'
 import { useStore } from '@/store'
+
+/* 1°×1° tile snapped to degree grid, centered on (lat, lon). */
+function tileBbox(lat: number, lon: number): Bbox {
+  const clat = Math.floor(lat) + 0.5
+  const clon = Math.floor(lon) + 0.5
+  return { west: clon - 0.5, south: clat - 0.5, east: clon + 0.5, north: clat + 0.5 }
+}
 
 interface MeshMapProps {
   sites?: CandidateSite[]
@@ -72,7 +79,10 @@ export function MeshMap({
     longitude: -82.5,
     zoom: 10,
   })
-  const defaultBbox: Bbox = { west: -82.6, south: 35.5, east: -82.4, north: 35.7 }
+  /* Derive the grid-snapped 1°×1° tile from the first selected site. */
+  const firstSite = sites.find(s => selectedSiteNames.includes(s.name))
+  const tileFromSite = useMemo(() => firstSite ? tileBbox(firstSite.latitude, firstSite.longitude) : null, [firstSite])
+  const defaultBbox: Bbox = tileFromSite ?? { west: -83, south: 35, east: -82, north: 36 }
   const [bbox, setBbox] = useState<Bbox | null>(defaultBbox)
   const [drawing, setDrawing] = useState(false)
   const [drawStart, setDrawStart] = useState<{
@@ -213,20 +223,10 @@ export function MeshMap({
   const handleMouseUp = useCallback(
     (e: MapLayerMouseEvent) => {
       if (drawing && drawStart) {
-        const ne = {
-          lat: Math.max(drawStart.lat, e.lngLat.lat),
-          lng: Math.max(drawStart.lng, e.lngLat.lng),
-        }
-        const sw = {
-          lat: Math.min(drawStart.lat, e.lngLat.lat),
-          lng: Math.min(drawStart.lng, e.lngLat.lng),
-        }
-        const newBbox: Bbox = {
-          west: sw.lng,
-          south: sw.lat,
-          east: ne.lng,
-          north: ne.lat,
-        }
+        // Use the midpoint of the drag to select the containing tile
+        const midLat = (drawStart.lat + e.lngLat.lat) / 2
+        const midLng = (drawStart.lng + e.lngLat.lng) / 2
+        const newBbox = tileBbox(midLat, midLng)
         setBbox(newBbox)
         onBboxSelect?.(newBbox)
         setDrawing(false)
@@ -326,22 +326,9 @@ export function MeshMap({
       if (touchDrawingRef.current && touchDrawStart.current) {
         touchDrawingRef.current = false
         setTouchDrawing(false)
-        const endLat = e.lngLat.lat
-        const endLng = e.lngLat.lng
-        const ne = {
-          lat: Math.max(touchDrawStart.current.lat, endLat),
-          lng: Math.max(touchDrawStart.current.lng, endLng),
-        }
-        const sw = {
-          lat: Math.min(touchDrawStart.current.lat, endLat),
-          lng: Math.min(touchDrawStart.current.lng, endLng),
-        }
-        const newBbox: Bbox = {
-          west: sw.lng,
-          south: sw.lat,
-          east: ne.lng,
-          north: ne.lat,
-        }
+        const midLat = (touchDrawStart.current.lat + e.lngLat.lat) / 2
+        const midLng = (touchDrawStart.current.lng + e.lngLat.lng) / 2
+        const newBbox = tileBbox(midLat, midLng)
         setBbox(newBbox)
         onBboxSelect?.(newBbox)
         setDrawing(false)
@@ -352,56 +339,13 @@ export function MeshMap({
     [onBboxSelect, clearLongPress],
   )
 
-  /* ── Bbox corner drag handlers ── */
-  const updateBboxCorner = useCallback(
-    (corner: string, lat: number, lng: number) => {
-      setBbox((prev) => {
-        if (!prev) return prev
-        let { west, south, east, north } = prev
-        switch (corner) {
-          case 'sw': west = lng; south = lat; break
-          case 'nw': west = lng; north = lat; break
-          case 'se': east = lng; south = lat; break
-          case 'ne': east = lng; north = lat; break
-        }
-        // Clamp to valid bounds and ensure min size
-        west = Math.max(-180, Math.min(west, east - 0.001))
-        east = Math.min(180, Math.max(east, west + 0.001))
-        south = Math.max(-90, Math.min(south, north - 0.001))
-        north = Math.min(90, Math.max(north, south + 0.001))
-        return { west, south, east, north }
-      })
-    },
-    [],
-  )
-
-  const handleBboxCornerDrag = useCallback(
-    (_corner: string, _e: MarkerDragEvent) => {
-      // position updated in onDragEnd after drag completes
-    },
-    [],
-  )
-
+  /* ── Bbox corner drag — snaps the 1°×1° tile to the grid ── */
   const handleBboxCornerDragEnd = useCallback(
-    (corner: string, e: MarkerDragEvent) => {
-      setBbox((prev) => {
-        if (!prev) return prev
-        let { west, south, east, north } = prev
-        switch (corner) {
-          case 'sw': west = e.lngLat.lng; south = e.lngLat.lat; break
-          case 'nw': west = e.lngLat.lng; north = e.lngLat.lat; break
-          case 'se': east = e.lngLat.lng; south = e.lngLat.lat; break
-          case 'ne': east = e.lngLat.lng; north = e.lngLat.lat; break
-        }
-        west = Math.max(-180, Math.min(west, east - 0.001))
-        east = Math.min(180, Math.max(east, west + 0.001))
-        south = Math.max(-90, Math.min(south, north - 0.001))
-        north = Math.min(90, Math.max(north, south + 0.001))
-        const next = { west, south, east, north }
-        // Use queueMicrotask to break out of React's render cycle
-        queueMicrotask(() => onBboxSelect?.(next))
-        return next
-      })
+    (_corner: string, e: MarkerDragEvent) => {
+      const next = tileBbox(e.lngLat.lat, e.lngLat.lng)
+      // Use queueMicrotask to break out of React's render cycle
+      queueMicrotask(() => onBboxSelect?.(next))
+      setBbox(next)
       setDragging(false)
     },
     [onBboxSelect],
