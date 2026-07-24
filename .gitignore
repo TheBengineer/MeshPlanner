@@ -28,3 +28,10 @@ data/dem_cache/
 # Agent/IDE state
 .omo
 .opencode
+
+# Playwright test artifacts
+.playwright-mcp/
+*.yml
+bbox-handles.png
+favicon_io*.zip
+MeshPlanner.png
