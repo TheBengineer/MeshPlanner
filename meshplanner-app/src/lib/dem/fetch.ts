@@ -138,19 +138,21 @@ export async function fetchDemRaster(
   const nTiles = (xMax - xMin + 1) * (yMax - yMin + 1)
 
   // Use the zoom level to determine DEM resolution
-  // Base: ~30m at zoom 12, scales inversely with zoom
+  // Adjust lon pixel size for latitude so ground pixels are square
   const kmPerDeg = 111.32
-  const pixelDeg = (30 / 1000 / kmPerDeg) * (12 / zoom)
+  const basePixelDeg = (30 / 1000 / kmPerDeg) * (12 / zoom)
+  const latRad = ((bbox.north + bbox.south) / 2) * Math.PI / 180
+  const lonPixelDeg = basePixelDeg / Math.cos(latRad)
 
-  const width = Math.max(1, Math.ceil((bbox.east - bbox.west) / pixelDeg))
-  const height = Math.max(1, Math.ceil((bbox.north - bbox.south) / pixelDeg))
+  const width = Math.max(1, Math.ceil((bbox.east - bbox.west) / lonPixelDeg))
+  const height = Math.max(1, Math.ceil((bbox.north - bbox.south) / basePixelDeg))
 
   const demArray = new Float32Array(width * height).fill(-32768)
   const demAffine = {
-    a: pixelDeg,
+    a: lonPixelDeg,
     c: bbox.west,
     f: bbox.north,
-    e: -pixelDeg,
+    e: -basePixelDeg,
   }
 
   let completed = 0
