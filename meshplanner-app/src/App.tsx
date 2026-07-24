@@ -227,6 +227,7 @@ export default function App() {
           </button>
 
           <FileUpload onFile={handleFileUpload} label="Upload CSV/GeoJSON" />
+          <button type="button" onClick={() => useStore.getState().triggerCenterOnSite()} style={{ width: '100%', padding: '4px 8px', marginTop: 4, marginBottom: 4, fontSize: 12 }}>Center on site</button>
           <SiteList
             sites={sites}
             selectedNames={selectedSiteNames}

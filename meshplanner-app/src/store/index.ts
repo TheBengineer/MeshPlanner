@@ -31,6 +31,7 @@ export interface CoverageParams {
   situationFraction?: number
   timeFraction?: number
   debugTerrain?: boolean
+  optimizationMode?: string
 }
 
 /* ── Params slice ── */
@@ -178,6 +179,7 @@ export const useStore = create<AppStore>((set, get) => ({
     situationFraction: 95,
     timeFraction: 95,
     debugTerrain: false,
+    optimizationMode: 'min-sites',
   },
   settings: {
     ...DEFAULT_LORA_PARAMS,
@@ -189,6 +191,7 @@ export const useStore = create<AppStore>((set, get) => ({
     situationFraction: 95,
     timeFraction: 95,
     debugTerrain: false,
+    optimizationMode: 'min-sites',
     showTerrain: false,
     colormap: 'plasma',
   },

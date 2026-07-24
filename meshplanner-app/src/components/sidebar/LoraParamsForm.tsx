@@ -143,6 +143,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
   const setHighResAndSync = (v: boolean) => { setHighRes(v); syncCoverage({ highRes: v }) }
   const setTargetAndSync = (v: number) => { setTarget(v); syncCoverage({ targetCoverage: v }) }
   const setClutterAndSync = (v: number) => { setClutterHeight(v); syncCoverage({ clutterHeightM: v }) }
+  const setOptMode = (v: string) => { setMode(v as any); syncCoverage({ optimizationMode: v }) }
 
   const isDirty = snap !== null && (
     SECTION_FIELDS.lora.concat(...Object.values(SECTION_FIELDS))
@@ -255,7 +256,6 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
         <label style={{ display: 'block', marginBottom: 6 }}>Cable Loss (dB)
           <input type="number" min={0} step={0.1} value={cableLossTx} onChange={e => setCableLossTxAndSync(Number(e.target.value))} style={{ marginLeft: 8, width: 70 }} aria-label="TX cable loss" />
         </label>
-        <button type="button" onClick={() => useStore.getState().triggerCenterOnSite()} style={{ width: '100%', padding: '4px 8px', marginBottom: 6, fontSize: 12 }}>Center on site</button>
         <div style={{ marginTop: 6, padding: 6, background: 'var(--bg-secondary)', borderRadius: 4, fontSize: 12, border: '1px solid var(--border)' }}>
           <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-h)' }}>Link Budget (140 dB loss)</div>
           <div>EIRP: {budget.txEirpDbm} dBm | RX: {budget.rxPowerDbm} dBm</div>
@@ -296,7 +296,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
       {sectionHeader('Optimization', 'optimization', optimizationOpen, toggle(setOptimizationOpen, optimizationOpen), 'optimization-toggle')}
       {optimizationOpen && (<div style={{ marginTop: 4 }}>
         <label>Mode
-          <select value={mode} onChange={e => setMode(e.target.value as any)} style={{ marginLeft: 8 }} aria-label="Optimization mode">
+          <select value={mode} onChange={e => setOptMode(e.target.value)} style={{ marginLeft: 8 }} aria-label="Optimization mode">
             <option value="min-sites">Min Sites</option>
             <option value="max-coverage">Max Coverage</option>
           </select>
