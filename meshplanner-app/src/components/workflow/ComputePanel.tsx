@@ -144,7 +144,7 @@ export function ComputePanel() {
       // SPLAT! creates 1-degree terrain pages. The DEM must cover the
       // degree-aligned tiles, not just the bbox, or narrow/tall bboxes
       // produce pages with empty terrain data.
-      setProgress({ current: 0, total: 4, label: "Fetching DEM tiles…" })
+      setProgress({ current: 0, total: 4, label: "Loading DEM tiles…" })
       const demBbox = {
         west: Math.floor(bbox.west),
         south: Math.floor(bbox.south),
@@ -155,7 +155,7 @@ export function ComputePanel() {
       try {
         dem = await fetchDemRaster(demBbox, (pct) => {
           setDemPct(pct)
-          setProgress({ current: 0, total: 4, label: `Fetching DEM tiles…` })
+          setProgress({ current: 0, total: 4, label: `Loading DEM tiles…` })
         }, demZoom)
       } catch (demErr) {
         const msg = demErr instanceof Error ? demErr.message : "Unknown DEM error"
