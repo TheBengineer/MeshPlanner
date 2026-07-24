@@ -26,6 +26,7 @@ export interface CoverageParams {
   numRadials: number
   threshold: number
   targetCoverage: number
+  highRes?: boolean
 }
 
 /* ── Params slice ── */

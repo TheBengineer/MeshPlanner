@@ -7,10 +7,11 @@ export interface RunRequest {
   type: 'run'
   runId: number
   params: EngineRunParams
-  demData: Float32Array
-  demWidth: number
-  demHeight: number
-  demAffine: { a: number; c: number; f: number; e: number }
+  demData?: Float32Array
+  demWidth?: number
+  demHeight?: number
+  demAffine?: { a: number; c: number; f: number; e: number }
+  pages?: (Int16Array | null)[]  // SPLAT! worker terrain pages
   start: number
   end: number
   chunk: number

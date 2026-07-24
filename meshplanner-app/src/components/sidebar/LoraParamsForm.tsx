@@ -13,7 +13,7 @@ const CLIMATE_CODES: Record<number, string> = {
 }
 
 interface LoraParamsFormProps {
-  onParamsChange?: (params: LoraParams, coverageKwargs: Record<string, number>) => void
+  onParamsChange?: (params: LoraParams, coverageKwargs: Record<string, number | boolean>) => void
 }
 
 export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
@@ -89,8 +89,8 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
   const budget = calculateLinkBudget(params, 140)
 
   const handleApply = useCallback(() => {
-    onParamsChange?.(params, { maxRangeKm: maxRange, numRadials: 360, stepKm: 0.1, numWorkers: 4, threshold, targetCoverage: target })
-  }, [params, maxRange, threshold, mode, target, onParamsChange])
+    onParamsChange?.(params, { maxRangeKm: maxRange, numRadials: 360, stepKm: 0.1, numWorkers: 4, threshold, targetCoverage: target, highRes })
+  }, [params, maxRange, threshold, mode, target, highRes, onParamsChange])
 
   const sectionHeader = (label: string, open: boolean, toggleFn: (e: any) => void, testId: string) => (
     <div

@@ -60,10 +60,9 @@ class EngineContext {
   ) {}
 
   static create(m: SplatModule, p: EngineRunParams): EngineContext {
-    // Convert meters to feet (SPLAT! uses feet AGL)
+    const ippd = p.resolutionIppd ?? 1200
     const txAltFeet = p.txHeightM * 3.28084
     const rxAltFeet = p.rxHeightM * 3.28084
-    // Convert dBm to ERP watts: P(W) = 10^((dBm - 30)/10)
     const erpWatts = Math.pow(10, (p.txPowerDbm + p.txAntennaGainDbi - p.cableLossTxDb - 30) / 10)
 
     const h = m._splat_create(
@@ -75,10 +74,10 @@ class EngineContext {
       p.climate, p.polarization,
       p.conf ?? 0.95, p.rel ?? 0.95, p.clutterHeightM ?? 1.0,
       p.radiusKm,
-      1200, // resolution IPPD
+      ippd,
     )
     check(h, 'splat_create')
-    return new EngineContext(m, h, 1200)
+    return new EngineContext(m, h, ippd)
   }
 
   pages(): PageRef[] {
@@ -246,6 +245,14 @@ interface PoolWorker {
   handler: ((msg: FromWorker) => void) | null
 }
 
+function defaultPoolSize(): number {
+  if (typeof navigator === 'undefined') return 2
+  let n = Math.min(navigator.hardwareConcurrency || 4, 8)
+  const mem = (navigator as { deviceMemory?: number }).deviceMemory
+  if (mem !== undefined && mem <= 4) n = Math.min(n, 2)
+  return Math.max(1, Math.min(n, 4))
+}
+
 export class WasmCoverageEngine implements CoverageEngine {
   readonly kind = 'wasm-workers' as const
 
@@ -254,8 +261,11 @@ export class WasmCoverageEngine implements CoverageEngine {
   private nextRunId = 1
   private busy = false
   private disposed = false
+  private readonly poolSize: number
 
-  constructor() {}
+  constructor(opts: { poolSize?: number } = {}) {
+    this.poolSize = Math.max(1, opts.poolSize ?? defaultPoolSize())
+  }
 
   async run(params: EngineRunParams, opts: CoverageRunOptions): Promise<CoverageResult> {
     if (this.disposed) throw new Error('engine disposed')
@@ -268,7 +278,7 @@ export class WasmCoverageEngine implements CoverageEngine {
       const { demData, demWidth, demHeight, demAffine } = opts
       const report = (p: CoverageProgress) => opts.onProgress?.(p)
 
-      /* ── Scout: enumerate pages via SPLAT! ── */
+      /* ── Scout: enumerate pages via SPLAT! (main thread, cheap) ── */
       const m = await this.getModule()
       const scout = EngineContext.create(m, params)
       let refs: PageRef[]
@@ -280,67 +290,113 @@ export class WasmCoverageEngine implements CoverageEngine {
         scout.destroy()
       }
 
-      /* OOM guard */
-      if (projectedHeapMB(refs.length, region.width * region.height, 1200) > HD_HEAP_BUDGET_MB) {
+      const ippd = params.resolutionIppd ?? 1200
+
+      if (projectedHeapMB(refs.length, region.width * region.height, ippd) > HD_HEAP_BUDGET_MB) {
         throw new Error('Area too large for SPLAT! — reduce max range')
       }
 
-      /* ── Terrain: build Int16Array pages from our DEM ── */
-      let tilesDone = 0
-      const pages = buildPages(refs, demData, demWidth, demHeight, demAffine, 1200)
+      /* ── Terrain: build Int16Array pages from DEM ── */
+      const pages = buildPages(refs, demData, demWidth, demHeight, demAffine, ippd)
       report({ phase: 'terrain', completed: refs.length, total: refs.length, fraction: TERRAIN_SPAN })
-
       opts.signal?.throwIfAborted()
 
-      /* ── Compute: single-thread (workers skip for now, use main-thread WASM) ── */
-      const ctx = EngineContext.create(m, params)
-      try {
-        for (let i = 0; i < refs.length; i++) {
-          const data = pages[i]
-          if (data) ctx.loadPage(i, data)
+      /* ── Compute: split radials across workers, each with own SPLAT! context ── */
+      const totalRadials = region.radials
+      const slices = sliceRadials(totalRadials, this.poolSize)
+      const runId = this.nextRunId++
+      const pool = this.ensureWorkers(slices.length)
+
+      const cancelAll = () => {
+        for (const pw of pool) pw.worker.postMessage({ type: 'cancel', runId } satisfies ToWorker)
+      }
+
+      const results = await new Promise<DoneMessage[]>((resolve, reject) => {
+        const done: (DoneMessage | undefined)[] = new Array(slices.length)
+        let remaining = slices.length
+        let settled = false
+
+        const fail = (err: Error) => {
+          if (settled) return
+          settled = true
+          cancelAll()
+          cleanup()
+          reject(err)
         }
 
-        const totalRadials = ctx.radialCount()
-        const chunk = 32
+        const onAbort = () => fail(new DOMException('aborted', 'AbortError'))
+        opts.signal?.addEventListener('abort', onAbort, { once: true })
 
-        for (let at = 0; at < totalRadials; ) {
-          opts.signal?.throwIfAborted()
-          const ran = ctx.runRadials(at, Math.min(chunk, totalRadials - at))
-          at += ran
-          report({ phase: 'compute', completed: at, total: totalRadials, fraction: TERRAIN_SPAN + (at / totalRadials) * COMPUTE_SPAN })
+        const cleanup = () => {
+          opts.signal?.removeEventListener('abort', onAbort)
+          for (const pw of pool) pw.handler = null
         }
 
-        ctx.rasterize()
-        const reg = ctx.region()
-        const signal = ctx.signal(reg.width, reg.height)
-        const mask = ctx.mask(reg.width, reg.height)
+        slices.forEach((slice, i) => {
+          const pw = pool[i]!
+          pw.handler = (msg: FromWorker) => {
+            if (msg.type === 'ready') return
+            if (msg.runId !== runId) return
+            if (msg.type === 'progress') {
+              const doneRadials = msg.radialsDone
+              report({ phase: 'compute', completed: doneRadials, total: totalRadials, fraction: TERRAIN_SPAN + (doneRadials / totalRadials) * COMPUTE_SPAN })
+            } else if (msg.type === 'done') {
+              done[i] = msg
+              if (--remaining === 0 && !settled) {
+                settled = true
+                cleanup()
+                resolve(done as DoneMessage[])
+              }
+            } else if (msg.type === 'error') {
+              const err = msg.code === 'aborted'
+                ? new DOMException('aborted', 'AbortError')
+                : new Error(`SPLAT! worker failed (${msg.code}): ${msg.message}`)
+              fail(err)
+            }
+          }
 
-        /* ── Finalize: convert to dBm ── */
-        report({ phase: 'finalize', completed: 0, total: 1, fraction: TERRAIN_SPAN + COMPUTE_SPAN })
-        const cells = reg.width * reg.height
-        const dbm = new Float32Array(cells)
-        for (let i = 0; i < cells; i++) {
-          dbm[i] = (mask[i]! & 248) !== 0 ? signal[i]! - 200 : NaN
-        }
+          pw.worker.postMessage({
+            type: 'run',
+            runId,
+            params,
+            pages,
+            start: slice.start,
+            end: slice.end,
+            chunk: 32,
+          } satisfies ToWorker)
+        })
+      })
 
-        const itmWarnings = ctx.errnumCounts()
-        report({ phase: 'finalize', completed: 1, total: 1, fraction: 1 })
+      /* ── Merge first-touch + convert to dBm ── */
+      report({ phase: 'finalize', completed: 0, total: 1, fraction: TERRAIN_SPAN + COMPUTE_SPAN })
+      const cells = region.width * region.height
+      const merged = mergeFirstTouch(
+        results.map((r): WorkerRaster => ({ signal: r.signal as Float32Array, mask: r.mask })),
+        cells,
+      )
 
-        return {
-          dbm, width: reg.width, height: reg.height,
-          bounds: { north: reg.north, south: reg.south, east: reg.east, west: reg.west },
-          pixelDegrees: 1 / 1200,
-          stats: {
-            radials: totalRadials,
-            pages: refs.length,
-            pagesWithData: pages.filter((p) => p !== null).length,
-            itmWarnings,
-            elapsedMs: performance.now() - started,
-            workers: 1,
-          },
-        }
-      } finally {
-        ctx.destroy()
+      const dbm = new Float32Array(cells)
+      for (let i = 0; i < cells; i++) {
+        dbm[i] = (merged.mask[i]! & 248) !== 0 ? merged.signal[i]! - 200 : NaN
+      }
+
+      const itmWarnings = [0, 0, 0, 0, 0, 0]
+      for (const r of results) r.itmWarnings.forEach((v, i) => { itmWarnings[i] = (itmWarnings[i] ?? 0) + v })
+
+      report({ phase: 'finalize', completed: 1, total: 1, fraction: 1 })
+
+      return {
+        dbm, width: region.width, height: region.height,
+        bounds: { north: region.north, south: region.south, east: region.east, west: region.west },
+        pixelDegrees: 1 / 1200,
+        stats: {
+          radials: totalRadials,
+          pages: refs.length,
+          pagesWithData: pages.filter((p) => p !== null).length,
+          itmWarnings,
+          elapsedMs: performance.now() - started,
+          workers: slices.length,
+        },
       }
     } finally {
       this.busy = false
@@ -360,5 +416,25 @@ export class WasmCoverageEngine implements CoverageEngine {
       }) as Promise<SplatModule>
     }
     return this.modulePromise
+  }
+
+  private ensureWorkers(count: number): PoolWorker[] {
+    while (this.workers.length < count) {
+      const worker = new Worker(new URL('../workers/splat.worker.ts', import.meta.url), {
+        type: 'module',
+        name: `splat-${this.workers.length}`,
+      })
+      const pw: PoolWorker = { worker, handler: null }
+      worker.onmessage = (ev: MessageEvent<FromWorker>) => pw.handler?.(ev.data)
+      worker.onerror = () =>
+        pw.handler?.({
+          type: 'error',
+          runId: -1,
+          code: 'worker',
+          message: 'worker crashed',
+        })
+      this.workers.push(pw)
+    }
+    return this.workers.slice(0, count)
   }
 }

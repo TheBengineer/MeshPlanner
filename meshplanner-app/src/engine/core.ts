@@ -25,6 +25,7 @@ export interface EngineRunParams {
   conf?: number
   rel?: number
   clutterHeightM?: number
+  resolutionIppd?: number
 }
 
 export interface RegionInfo {

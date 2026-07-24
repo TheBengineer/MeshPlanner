@@ -21,6 +21,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
 
   if (msg.type !== 'run') return
   const { runId, params, demData, demWidth, demHeight, demAffine, start, end } = msg
+  if (!demData || !demWidth || !demHeight || !demAffine) return // safety check for old protocol
 
   const pixelCount = demWidth * demHeight
   const signal = new Float32Array(pixelCount).fill(-Infinity)

@@ -112,7 +112,8 @@ export function ComputePanel() {
     setOptimizationPhase("computing")
 
     const startTime = performance.now()
-    const { maxRangeKm, numRadials, threshold, targetCoverage } = coverageParams
+      const { maxRangeKm, numRadials, threshold, targetCoverage, highRes } = coverageParams
+      const ippd = highRes ? 3600 : 1200
 
     try {
       // ── Step 1: Fetch DEM ──
@@ -162,6 +163,7 @@ export function ComputePanel() {
             surfaceRefractivity: params.surfaceRefractivity ?? 314,
             radiusKm: maxRangeKm,
             numRadials,
+            resolutionIppd: ippd,
           }
 
           const engine = getEngine()
@@ -173,7 +175,7 @@ export function ComputePanel() {
           })
 
           // Convert CoverageResult to CoverageRaster, sampled onto DEM grid
-          // Use SPLAT!'s actual pixel size from its output dimensions and bounds
+          // Use bilinear interpolation between SPLAT! pixels for smooth transitions
           const splatPixelLon = (result.bounds.east - result.bounds.west) / result.width
           const splatPixelLat = (result.bounds.north - result.bounds.south) / result.height
           const demRssi = new Float32Array(dem.width * dem.height).fill(-Infinity)
@@ -181,11 +183,25 @@ export function ComputePanel() {
             const lat = demAffine.f + r * demAffine.e
             for (let c = 0; c < dem.width; c++) {
               const lon = demAffine.c + c * demAffine.a
-              const sc = Math.round((lon - result.bounds.west) / splatPixelLon)
-              const sr = Math.round((result.bounds.north - lat) / splatPixelLat)
-              if (sc >= 0 && sc < result.width && sr >= 0 && sr < result.height) {
-                demRssi[r * dem.width + c] = result.dbm[sr * result.width + sc]!
+              const sc = (lon - result.bounds.west) / splatPixelLon
+              const sr = (result.bounds.north - lat) / splatPixelLat
+              // Bilinear interpolation between 4 nearest SPLAT! pixels
+              const sc0 = Math.floor(sc); const sr0 = Math.floor(sr)
+              const sc1 = sc0 + 1; const sr1 = sr0 + 1
+              if (sc0 < 0 || sc1 >= result.width || sr0 < 0 || sr1 >= result.height) {
+                // Use nearest-neighbor at edges
+                const sci = Math.round(sc); const sri = Math.round(sr)
+                if (sci >= 0 && sci < result.width && sri >= 0 && sri < result.height) {
+                  demRssi[r * dem.width + c] = result.dbm[sri * result.width + sci]!
+                }
+                continue
               }
+              const fx = sc - sc0; const fy = sr - sr0
+              const v00 = result.dbm[sr0 * result.width + sc0]!
+              const v10 = result.dbm[sr0 * result.width + sc1]!
+              const v01 = result.dbm[sr1 * result.width + sc0]!
+              const v11 = result.dbm[sr1 * result.width + sc1]!
+              demRssi[r * dem.width + c] = v00 + (v10 - v00) * fx + (v01 - v00) * fy + (v11 - v10 - v01 + v00) * fx * fy
             }
           }
           const raster: CoverageRaster = {
@@ -235,8 +251,8 @@ export function ComputePanel() {
       // Generate heatmap image overlay (colormapped, Mercator-corrected)
       const img = coverageImage(combined, {
         colormap,
-        minDbm: threshold - 30,
-        maxDbm: 0,
+          minDbm: threshold - 30,
+          maxDbm: -80,
         opacity: 0.7,
         sensitivityDbm: threshold,
       })
