@@ -72,7 +72,7 @@ class EngineContext {
       p.groundPermittivity, p.groundConductivity,
       p.surfaceRefractivity,
       p.climate, p.polarization,
-      p.conf ?? 0.95, p.rel ?? 0.95, p.clutterHeightM ?? 1.0,
+      p.conf ?? 0.5, p.rel ?? 0.5, p.clutterHeightM ?? 1.0,
       p.radiusKm,
       ippd,
     )
