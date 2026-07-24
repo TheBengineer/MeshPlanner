@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import type { Bbox, CandidateSite, LoraParams, LinkBudget, CoverageRaster, OptimizationResult } from "@/lib/types"
 import type { CoverageImageResult } from "@/lib/render/coverage-image"
+import type { TerrainImageResult } from "@/lib/render/terrain-image"
 import { DEFAULT_LORA_PARAMS } from "@/lib/constants"
 import { calculateLinkBudget } from "@/lib/math/link-budget"
 
@@ -44,10 +45,12 @@ export interface MapSlice {
   bbox: Bbox | null
   coverageGeoJson: GeoJSON.FeatureCollection | null
   coverageImage: CoverageImageResult | null
+  terrainImage: TerrainImageResult | null
   viewport: { latitude: number; longitude: number; zoom: number }
   setBbox: (bbox: Bbox | null) => void
   setCoverageGeoJson: (gj: GeoJSON.FeatureCollection | null) => void
   setCoverageImage: (img: CoverageImageResult | null) => void
+  setTerrainImage: (img: TerrainImageResult | null) => void
   setViewport: (vp: { latitude: number; longitude: number; zoom: number }) => void
 }
 
@@ -61,12 +64,14 @@ export interface UISlice {
   computing: boolean
   placing: boolean
   colormap: string
+  showTerrain: boolean
   progress: { current: number; total: number; label: string } | null
   setMode: (mode: AppMode) => void
   setSidebarOpen: (open: boolean) => void
   setComputing: (v: boolean) => void
   setPlacing: (v: boolean) => void
   setColormap: (v: string) => void
+  setShowTerrain: (v: boolean) => void
   setProgress: (p: { current: number; total: number; label: string } | null) => void
 }
 
@@ -181,11 +186,13 @@ export const useStore = create<AppStore>((set, get) => ({
   bbox: null,
   coverageGeoJson: null,
   coverageImage: null,
+  terrainImage: null,
   viewport: { latitude: 35.6, longitude: -82.5, zoom: 10 },
 
   setBbox: (bbox) => set({ bbox }),
   setCoverageGeoJson: (gj) => set({ coverageGeoJson: gj }),
   setCoverageImage: (img) => set({ coverageImage: img }),
+  setTerrainImage: (img) => set({ terrainImage: img }),
   setViewport: (vp) => set({ viewport: vp }),
 
   /* UI */
@@ -194,6 +201,7 @@ export const useStore = create<AppStore>((set, get) => ({
   computing: false,
   placing: false,
   colormap: 'plasma',
+  showTerrain: false,
   progress: null,
 
   setMode: (mode) => set({ mode }),
@@ -201,6 +209,7 @@ export const useStore = create<AppStore>((set, get) => ({
   setComputing: (v) => set({ computing: v }),
   setPlacing: (v) => set({ placing: v }),
   setColormap: (v) => set({ colormap: v }),
+  setShowTerrain: (v) => set({ showTerrain: v }),
   setProgress: (p) => set({ progress: p }),
 
   /* Results */

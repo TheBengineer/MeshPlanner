@@ -23,7 +23,7 @@ export default function App() {
     updateSitePosition,
     bbox, setBbox, setMode, toggleSiteSelection, selectedSiteNames,
     coverageImage, updateCoverageParams,
-    placing, setPlacing,
+    placing, setPlacing, showTerrain, setShowTerrain, terrainImage, setTerrainImage,
   } = useStore()
 
   const placeCounter = useRef(0)
@@ -181,6 +181,28 @@ export default function App() {
         <div className="sidebar-section sidebar-section--padded">
           <div className="section-label">Sites</div>
           <SiteForm onAddSite={addSite} />
+
+          {/* Terrain overlay toggle */}
+          <button
+            type="button"
+            data-testid="terrain-toggle"
+            onClick={() => setShowTerrain(!showTerrain)}
+            aria-pressed={showTerrain}
+            style={{
+              width: '100%',
+              marginTop: 6,
+              padding: '6px 10px',
+              fontSize: 12,
+              fontWeight: 600,
+              border: showTerrain ? '1px solid var(--accent)' : '1px solid var(--border)',
+              borderRadius: 4,
+              cursor: 'pointer',
+              background: showTerrain ? 'var(--accent)' : 'var(--bg)',
+              color: showTerrain ? '#fff' : 'var(--text-h)',
+            }}
+          >
+            {showTerrain ? 'Terrain On' : 'Show Terrain'}
+          </button>
 
           {/* Place button — toggles placing mode */}
           <button

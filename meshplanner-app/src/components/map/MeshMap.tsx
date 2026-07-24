@@ -130,6 +130,39 @@ export function MeshMap({
     img.src = coverageImg.url
   }, [coverageImg])
 
+  /* ── Terrain elevation image overlay ── */
+  const prevTerrainImgRef = useRef<CoverageImageResult | null>(null)
+  const showTerrain = useStore((s) => s.showTerrain)
+  const terrainImg = useStore((s) => s.terrainImage)
+  useEffect(() => {
+    const map = mapRef.current?.getMap()
+    if (!map) return
+    if (prevTerrainImgRef.current) {
+      try { map.removeLayer('terrain-layer'); map.removeSource('terrain-layer') }
+      catch { /* already removed */ }
+    }
+    prevTerrainImgRef.current = null
+    if (!showTerrain || !terrainImg) return
+    prevTerrainImgRef.current = terrainImg as any
+    const img = new window.Image()
+    img.onload = () => {
+      try {
+        map.addSource('terrain-layer', {
+          type: 'image' as const,
+          url: terrainImg.url,
+          coordinates: terrainImg.coordinates,
+        })
+        map.addLayer({
+          id: 'terrain-layer',
+          type: 'raster' as const,
+          source: 'terrain-layer',
+          paint: { 'raster-opacity': 0.6, 'raster-resampling': 'nearest' },
+        })
+      } catch (e) { console.warn('Failed to add terrain layer:', e) }
+    }
+    img.src = terrainImg.url
+  }, [showTerrain, terrainImg])
+
   /* ── Sync external bbox (from sidebar) into local state ── */
   useEffect(() => {
     if (externalBbox) setBbox(externalBbox)

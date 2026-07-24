@@ -8,6 +8,7 @@ import { warmStartMinSites } from "@/lib/optimize/warmstart"
 import { computeCoverageWithWorkers } from "@/workers/coverage-manager"
 import { WasmCoverageEngine } from "@/engine/WasmCoverageEngine"
 import { coverageImage } from "@/lib/render/coverage-image"
+import { terrainImage } from "@/lib/render/terrain-image"
 import type { CoverageRaster, OptimizationResult } from "@/lib/types"
 import type { EngineRunParams } from "@/engine/core"
 import { Affine } from "@/lib/math/affine"
@@ -56,6 +57,7 @@ export function ComputePanel() {
     setProgress,
     setCoverageGeoJson,
     setCoverageImage,
+    setTerrainImage,
     setCoverageResults,
     setOptimizationResult,
     setGreedyResult,
@@ -127,6 +129,10 @@ export function ComputePanel() {
         )
       }
       const demAffine = dem.affine
+
+      // Generate terrain elevation image for debugging
+      const tImg = terrainImage(dem.data, dem.width, dem.height, demAffine)
+      setTerrainImage(tImg)
 
       // ── Step 2: Compute coverage for each selected site ──
       setProgress({ current: 1, total: 4, label: `Computing coverage (${selectedSiteNames.length} sites)…` })
