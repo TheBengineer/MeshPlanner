@@ -172,6 +172,8 @@ export function ComputePanel() {
             groundConductivity: params.groundConductivity ?? 0.005,
             surfaceRefractivity: params.surfaceRefractivity ?? 314,
             clutterHeightM: coverageParams.clutterHeightM ?? 1.0,
+            conf: coverageParams.situationFraction != null ? coverageParams.situationFraction / 100 : undefined,
+            rel: coverageParams.timeFraction != null ? coverageParams.timeFraction / 100 : undefined,
             radiusKm: maxRangeKm,
             numRadials,
             resolutionIppd: ippd,

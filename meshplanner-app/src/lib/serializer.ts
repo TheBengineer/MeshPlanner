@@ -18,9 +18,16 @@ export interface PersistedState {
   m: AppMode                  // app mode
   b: Bbox | null              // bounding box
   p: Partial<LoraParams>      // transmitter/receiver/environment params
-  r: number                   // max range km
-  t: number                   // threshold dBm
-  tc: number                  // target coverage fraction
+  cp: {                       // coverage params
+    maxRangeKm: number
+    numRadials: number
+    threshold: number
+    targetCoverage: number
+    highRes?: boolean
+    clutterHeightM?: number
+    situationFraction?: number
+    timeFraction?: number
+  } | null
   c: string                   // colormap name
   vp: { lat: number; lon: number; zoom: number } | null  // map viewport
 }
@@ -66,7 +73,16 @@ export function extractState(store: {
   mode: AppMode
   bbox: Bbox | null
   params: LoraParams
-  coverageParams: { maxRangeKm: number; threshold: number; targetCoverage: number }
+  coverageParams: {
+    maxRangeKm: number
+    numRadials: number
+    threshold: number
+    targetCoverage: number
+    highRes?: boolean
+    clutterHeightM?: number
+    situationFraction?: number
+    timeFraction?: number
+  }
   colormap: string
 }): PersistedState {
   return {
@@ -94,9 +110,16 @@ export function extractState(store: {
       groundConductivity: store.params.groundConductivity,
       surfaceRefractivity: store.params.surfaceRefractivity,
     },
-    r: store.coverageParams.maxRangeKm,
-    t: store.coverageParams.threshold,
-    tc: store.coverageParams.targetCoverage,
+    cp: {
+      maxRangeKm: store.coverageParams.maxRangeKm,
+      numRadials: store.coverageParams.numRadials,
+      threshold: store.coverageParams.threshold,
+      targetCoverage: store.coverageParams.targetCoverage,
+      highRes: store.coverageParams.highRes,
+      clutterHeightM: store.coverageParams.clutterHeightM,
+      situationFraction: store.coverageParams.situationFraction,
+      timeFraction: store.coverageParams.timeFraction,
+    },
     c: store.colormap,
     vp: null, // viewport will be added separately
   }

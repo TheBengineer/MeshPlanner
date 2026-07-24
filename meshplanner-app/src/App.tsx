@@ -56,16 +56,19 @@ export default function App() {
       }
       if (state.b) s.setBbox(state.b)
       if (state.p) {
-        // Partial params merge — only set non-undefined values
         const merged: any = {}
         for (const [key, val] of Object.entries(state.p)) {
           if (val !== undefined) merged[key] = val
         }
         if (Object.keys(merged).length > 0) s.updateParams(merged)
       }
-      if (state.r) useStore.setState({ coverageParams: { ...s.coverageParams, maxRangeKm: state.r } })
-      if (state.t) useStore.setState({ coverageParams: { ...s.coverageParams, threshold: state.t } })
-      if (state.tc) useStore.setState({ coverageParams: { ...s.coverageParams, targetCoverage: state.tc } })
+      if (state.cp) useStore.setState({ coverageParams: { ...s.coverageParams, ...state.cp } })
+      else {
+        // Legacy restore (single-field coverage attrs)
+        if ((state as any).r) useStore.setState({ coverageParams: { ...s.coverageParams, maxRangeKm: (state as any).r } })
+        if ((state as any).t) useStore.setState({ coverageParams: { ...s.coverageParams, threshold: (state as any).t } })
+        if ((state as any).tc) useStore.setState({ coverageParams: { ...s.coverageParams, targetCoverage: (state as any).tc } })
+      }
       if (state.c) s.setColormap(state.c)
       if (state.m) s.setMode(state.m)
     }
