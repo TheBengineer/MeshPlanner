@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useRef } from 'react'
+import { lazy, Suspense, useCallback, useRef, useEffect } from 'react'
 import { BboxSelector } from '@/components/map/BboxSelector'
 import { SiteList } from '@/components/sidebar/SiteList'
 import { SiteForm } from '@/components/sidebar/SiteForm'
@@ -9,6 +9,7 @@ import { parseSitesCsv } from '@/lib/sites/csv'
 import { parseSitesGeoJson } from '@/lib/sites/geojson'
 import { useStore } from '@/store'
 import type { AppMode } from '@/store'
+import { encodeState, decodeState, extractState } from '@/lib/serializer'
 import './App.css'
 
 const MeshMap = lazy(() => import('@/components/map/MeshMap').then(m => ({ default: m.MeshMap })))
@@ -26,6 +27,76 @@ export default function App() {
   } = useStore()
 
   const placeCounter = useRef(0)
+
+  /* ── URL state persistence ── */
+
+  const restoredRef = useRef(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  // Restore state from URL on mount
+  useEffect(() => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+
+    const params = new URLSearchParams(window.location.search)
+    const encoded = params.get('state')
+    if (!encoded) return
+
+    const state = decodeState(encoded)
+    if (!state) return
+
+    const s = useStore.getState()
+    // Only restore if there's actual state data
+    if (state.s.length > 0 || state.b) {
+      if (state.s.length > 0) {
+        s.loadSites(state.s)
+        // Restore selection
+        if (state.sn.length > 0) {
+          useStore.setState({ selectedSiteNames: state.sn })
+        }
+      }
+      if (state.b) s.setBbox(state.b)
+      if (state.p) {
+        // Partial params merge — only set non-undefined values
+        const merged: any = {}
+        for (const [key, val] of Object.entries(state.p)) {
+          if (val !== undefined) merged[key] = val
+        }
+        if (Object.keys(merged).length > 0) s.updateParams(merged)
+      }
+      if (state.r) useStore.setState({ coverageParams: { ...s.coverageParams, maxRangeKm: state.r } })
+      if (state.t) useStore.setState({ coverageParams: { ...s.coverageParams, threshold: state.t } })
+      if (state.tc) useStore.setState({ coverageParams: { ...s.coverageParams, targetCoverage: state.tc } })
+      if (state.c) s.setColormap(state.c)
+      if (state.m) s.setMode(state.m)
+    }
+  }, [])
+
+  // Subscribe to store changes → debounce → update URL
+  useEffect(() => {
+    const unsub = useStore.subscribe(() => {
+      clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => {
+        const state = useStore.getState()
+        const persisted = extractState(state)
+        // Include viewport
+        persisted.vp = {
+          lat: state.viewport.latitude,
+          lon: state.viewport.longitude,
+          zoom: state.viewport.zoom,
+        }
+        const encoded = encodeState(persisted)
+        const url = new URL(window.location.href)
+        if (encoded) {
+          url.searchParams.set('state', encoded)
+        } else {
+          url.searchParams.delete('state')
+        }
+        window.history.replaceState({}, '', url.toString())
+      }, 500)
+    })
+    return unsub
+  }, [])
 
   const handlePlaceSite = useCallback((lat: number, lon: number) => {
     placeCounter.current += 1

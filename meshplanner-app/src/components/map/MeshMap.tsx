@@ -11,6 +11,7 @@ import type { StyleSpecification } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Bbox, CandidateSite } from '@/lib/types'
 import type { CoverageImageResult } from '@/lib/render/coverage-image'
+import { useStore } from '@/store'
 
 interface MeshMapProps {
   sites?: CandidateSite[]
@@ -167,7 +168,9 @@ export function MeshMap({
   /* ── Mouse handlers (desktop Shift+Click bbox) ── */
 
   const handleMoveEnd = useCallback((e: ViewStateChangeEvent) => {
-    setViewport(e.viewState)
+    const vp = e.viewState
+    setViewport(vp)
+    useStore.getState().setViewport({ latitude: vp.latitude, longitude: vp.longitude, zoom: vp.zoom })
   }, [])
 
   const handleMouseDown = useCallback(
