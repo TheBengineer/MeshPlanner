@@ -301,8 +301,15 @@ async function runIlpSolver(
 ): Promise<OptimizationResult | null> {
   try {
     // Lazy-load hiGHS WASM
+    // Lazy-load hiGHS WASM
     const mod: any = await import('highs')
-    const solver: HighsClient = await mod.default()
+    const locateFile = (path: string) => {
+      // hiGHS looks for its WASM relative to its script location.
+      // Vite pre-bundles it to /node_modules/.vite/deps/highs.js but the
+      // WASM is at /node_modules/highs/build/highs.wasm. Point there.
+      return `/node_modules/highs/build/${path}`
+    }
+    const solver: HighsClient = await mod.default({ locateFile })
 
     const solution: HighsSolution = solver.solve(lpString, {
       time_limit: timeLimitS,
@@ -339,7 +346,8 @@ async function runIlpSolver(
       status: solution.Status,
       source: 'ilp',
     }
-  } catch {
+  } catch (err) {
+      console.warn('ILP solver failed:', err)
     return null
   }
 }
@@ -386,7 +394,8 @@ export function warmStartMinSites(
         deferred.resolve(ilp)
         return
       }
-    } catch {
+    } catch (err) {
+      console.warn('ILP solver failed:', err)
       // Fall through — signal completion with greedy below
     }
     // ILP failed/timed out — signal completion with greedy fallback
@@ -437,7 +446,8 @@ export function warmStartMaxCoverage(
         deferred.resolve(ilp)
         return
       }
-    } catch {
+    } catch (err) {
+      console.warn('ILP solver failed:', err)
       // Fall through — signal completion with greedy below
     }
     // ILP failed/timed out — signal completion with greedy fallback

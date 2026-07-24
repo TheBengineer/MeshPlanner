@@ -302,8 +302,8 @@ export function ComputePanel() {
 
             setOptimizationPhase("ilp-complete")
             if (result.source !== "ilp") {
-              // hiGHS WASM load failed / ILP unavailable
-              setError("ILP solver unavailable — using greedy result")
+              // hiGHS WASM load failed or ILP didn't improve — not a real error
+              console.info('ILP fallback: using greedy result')
             }
             onIlpDone?.()
           },

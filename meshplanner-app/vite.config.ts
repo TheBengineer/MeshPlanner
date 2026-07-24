@@ -95,7 +95,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['highs'],
+    include: ['highs'],
   },
   build: {
     outDir: 'dist',
