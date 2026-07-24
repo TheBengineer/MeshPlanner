@@ -336,6 +336,47 @@ export class WasmCoverageEngine implements CoverageEngine {
           if (data) ctx.loadPage(i, data)
         }
 
+        /* ── Debug: output raw terrain elevation instead of signal ── */
+        if (params.debugTerrain) {
+          const reg = ctx.region()
+          const cells = reg.width * reg.height
+          const dbm = new Float32Array(cells)
+          const ippd = params.resolutionIppd ?? 1200
+          let minEl = Infinity, maxEl = -Infinity
+          for (let r = 0; r < reg.height; r++) {
+            const lat = reg.north - (r + 0.5) * (1 / ippd)
+            for (let c = 0; c < reg.width; c++) {
+              const lon = reg.west + (c + 0.5) * (1 / ippd)
+              const ref = refs.find(
+                (rf) => lat >= rf.minNorth && lat < rf.minNorth + 1 && lon >= -(rf.minWest + 1) && lon < -rf.minWest,
+              )
+              if (ref) {
+                const pi = refs.indexOf(ref)
+                const pg = pages[pi]
+                if (pg) {
+                  const pgWest = -(ref.minWest + 1)
+                  const pc = Math.round((lon - pgWest) * ippd)
+                  const pr = Math.round((ref.minNorth + 1 - lat) * ippd)
+                  if (pc >= 0 && pc < ippd && pr >= 0 && pr < ippd) {
+                    const el = pg[pr * ippd + pc]!
+                    dbm[r * reg.width + c] = el
+                    if (el < minEl) minEl = el
+                    if (el > maxEl) maxEl = el
+                  }
+                }
+              }
+            }
+          }
+          console.log(`[SPLAT-DEBUG] Terrain elevation: ${minEl.toFixed(1)} to ${maxEl.toFixed(1)} m`)
+          report({ phase: 'finalize', completed: 1, total: 1, fraction: 1 })
+          return {
+            dbm, width: reg.width, height: reg.height,
+            bounds: { north: reg.north, south: reg.south, east: reg.east, west: reg.west },
+            pixelDegrees: 1 / ippd,
+            stats: { radials: 0, pages: refs.length, pagesWithData: pages.filter((p) => p !== null).length, itmWarnings: [0, 0, 0, 0, 0, 0], elapsedMs: performance.now() - started, workers: 1 },
+          }
+        }
+
         const totalRadials = ctx.radialCount()
         const chunk = 32
 

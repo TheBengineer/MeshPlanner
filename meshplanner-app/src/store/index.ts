@@ -30,6 +30,7 @@ export interface CoverageParams {
   clutterHeightM?: number
   situationFraction?: number
   timeFraction?: number
+  debugTerrain?: boolean
 }
 
 /* ── Params slice ── */
@@ -172,6 +173,7 @@ export const useStore = create<AppStore>((set, get) => ({
     clutterHeightM: 1.0,
     situationFraction: 95,
     timeFraction: 95,
+    debugTerrain: false,
   },
   linkBudget: null,
 

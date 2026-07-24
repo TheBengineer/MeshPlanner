@@ -26,6 +26,8 @@ export interface EngineRunParams {
   rel?: number
   clutterHeightM?: number
   resolutionIppd?: number
+  /** When true, output terrain elevation instead of signal strength. */
+  debugTerrain?: boolean
 }
 
 export interface RegionInfo {

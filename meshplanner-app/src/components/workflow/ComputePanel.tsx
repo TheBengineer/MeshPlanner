@@ -53,6 +53,7 @@ export function ComputePanel() {
     improvement,
     error,
     colormap,
+    updateCoverageParams,
     setComputing,
     setProgress,
     setCoverageGeoJson,
@@ -112,7 +113,7 @@ export function ComputePanel() {
     setOptimizationPhase("computing")
 
     const startTime = performance.now()
-      const { maxRangeKm, numRadials, threshold, targetCoverage, highRes } = coverageParams
+      const { maxRangeKm, numRadials, threshold, targetCoverage, highRes, debugTerrain } = coverageParams
       const ippd = highRes ? 3600 : 1200
       const demZoom = highRes ? 13 : 12
 
@@ -177,6 +178,7 @@ export function ComputePanel() {
             radiusKm: maxRangeKm,
             numRadials,
             resolutionIppd: ippd,
+            debugTerrain: debugTerrain ?? false,
           }
 
           const engine = getEngine()
@@ -264,10 +266,10 @@ export function ComputePanel() {
       // Generate heatmap image overlay (colormapped, Mercator-corrected)
       const img = coverageImage(combined, {
         colormap,
-          minDbm: threshold - 30,
-          maxDbm: -80,
+        minDbm: debugTerrain ? 0 : threshold - 30,
+        maxDbm: debugTerrain ? 1500 : -80,
         opacity: 0.7,
-        sensitivityDbm: threshold,
+        sensitivityDbm: debugTerrain ? -9999 : threshold,
       })
       setCoverageImage(img)
 
@@ -408,17 +410,23 @@ export function ComputePanel() {
     <div style={{ borderTop: "1px solid var(--border)", padding: "8px" }}>
 
       {/* ── Compute button ── */}
-      <button
-        type="button"
-        data-testid="compute-btn"
-        onClick={handleCompute}
-        disabled={disableButton}
-        aria-label={disableButton ? `Compute coverage${!bbox ? " — bounding box required" : ""}${selectedSiteNames.length === 0 ? " — select at least one site" : ""}` : "Compute coverage"}
-        aria-busy={computing ? "true" : undefined}
-        style={primaryBtn(disableButton)}
-      >
-        {buttonLabel}
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+        <button
+          type="button"
+          data-testid="compute-btn"
+          onClick={handleCompute}
+          disabled={disableButton}
+          aria-label={disableButton ? `Compute coverage${!bbox ? " — bounding box required" : ""}${selectedSiteNames.length === 0 ? " — select at least one site" : ""}` : "Compute coverage"}
+          aria-busy={computing ? "true" : undefined}
+          style={{ ...primaryBtn(disableButton), flex: 1 }}
+        >
+          {buttonLabel}
+        </button>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }} title="Show terrain elevation instead of signal strength">
+          <input type="checkbox" checked={coverageParams.debugTerrain ?? false} onChange={e => updateCoverageParams({ debugTerrain: e.target.checked })} aria-label="Debug terrain mode" />
+          Terrain
+        </label>
+      </div>
 
       {/* ── Progress bar (DEM/coverage/combine) ── */}
       {computing && progress && optimizationPhase === "computing" && (
