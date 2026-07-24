@@ -135,7 +135,7 @@ export async function fetchDemRaster(
     bbox.north,
     zoom,
   )
-  const nTiles = (xMax - xMin + 1) * (yMax - yMin + 1)
+  const nTiles = (xMax - xMin + 1) * (Math.abs(yMax - yMin) + 1)
 
   // Square-degree pixels — MapLibre handles Mercator projection naturally
   const kmPerDeg = 111.32
