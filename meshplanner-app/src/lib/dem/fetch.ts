@@ -105,21 +105,20 @@ export async function fetchDemRaster(
   const nTiles = (xMax - xMin + 1) * (yMax - yMin + 1)
 
   // Calculate output dimensions from bbox at ~30m resolution
-  const latRad =
-    (((bbox.north + bbox.south) / 2) * Math.PI) / 180
+  // Use square pixels (same size for lat and lon) to avoid aspect ratio
+  // distortion when rendering coverage overlays on the map.
   const kmPerDeg = 111.32
-  const pixelSize = 30 / 1000 / kmPerDeg // ~30m in degrees at equator
-  const lonPixelSize = pixelSize / Math.cos(latRad)
+  const pixelDeg = 30 / 1000 / kmPerDeg // ~30m in degrees
 
-  const width = Math.ceil((bbox.east - bbox.west) / lonPixelSize)
-  const height = Math.ceil((bbox.north - bbox.south) / pixelSize)
+  const width = Math.ceil((bbox.east - bbox.west) / pixelDeg)
+  const height = Math.ceil((bbox.north - bbox.south) / pixelDeg)
 
   const demArray = new Float32Array(width * height).fill(-32768)
   const demAffine = {
-    a: lonPixelSize,
+    a: pixelDeg,
     c: bbox.west,
     f: bbox.north,
-    e: -pixelSize,
+    e: -pixelDeg,
   }
 
   let completed = 0
