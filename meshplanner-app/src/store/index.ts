@@ -179,7 +179,19 @@ export const useStore = create<AppStore>((set, get) => ({
     timeFraction: 95,
     debugTerrain: false,
   },
-  settings: {},
+  settings: {
+    ...DEFAULT_LORA_PARAMS,
+    maxRangeKm: 30,
+    numRadials: 360,
+    threshold: -120,
+    targetCoverage: 0.95,
+    clutterHeightM: 1.0,
+    situationFraction: 95,
+    timeFraction: 95,
+    debugTerrain: false,
+    showTerrain: false,
+    colormap: 'plasma',
+  },
   linkBudget: null,
 
   updateParams: (partial) =>
@@ -241,7 +253,7 @@ export const useStore = create<AppStore>((set, get) => ({
   setComputing: (v) => set({ computing: v }),
   setPlacing: (v) => set({ placing: v }),
   setColormap: (v) => set((s) => ({ colormap: v, settings: { ...s.settings, colormap: v } })),
-  setShowTerrain: (v) => set({ showTerrain: v }),
+  setShowTerrain: (v) => set((s) => ({ showTerrain: v, settings: { ...s.settings, showTerrain: v } })),
   setProgress: (p) => set({ progress: p }),
 
   /* Results */
