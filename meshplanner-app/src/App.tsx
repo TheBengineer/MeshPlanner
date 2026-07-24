@@ -1,5 +1,4 @@
 import { lazy, Suspense, useCallback, useRef, useEffect } from 'react'
-import { BboxSelector } from '@/components/map/BboxSelector'
 import { SiteList } from '@/components/sidebar/SiteList'
 import { SiteForm } from '@/components/sidebar/SiteForm'
 import { LoraParamsForm } from '@/components/sidebar/LoraParamsForm'
@@ -21,7 +20,7 @@ export default function App() {
     mode,
     sites, addSite, removeSite, clearSites,
     updateSitePosition,
-    bbox, setBbox, setMode, toggleSiteSelection, selectedSiteNames,
+    setMode, toggleSiteSelection, selectedSiteNames,
     coverageImage, updateCoverageParams,
     placing, setPlacing, showTerrain, setShowTerrain, terrainImage, setTerrainImage,
   } = useStore()
@@ -176,8 +175,6 @@ export default function App() {
           </label>
         </div>
 
-        <BboxSelector bbox={bbox} onBboxChange={setBbox} />
-
         <div className="sidebar-section sidebar-section--padded">
           <div className="section-label">Sites</div>
           <SiteForm onAddSite={addSite} />
@@ -257,8 +254,6 @@ export default function App() {
             sites={sites}
             selectedSiteNames={selectedSiteNames}
             coverageImage={coverageImage ?? undefined}
-            bbox={bbox}
-            onBboxSelect={setBbox}
             placing={placing}
             onPlaceSite={handlePlaceSite}
             onCancelPlacing={handleCancelPlacing}

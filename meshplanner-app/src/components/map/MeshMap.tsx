@@ -13,19 +13,36 @@ import type { Bbox, CandidateSite } from '@/lib/types'
 import type { CoverageImageResult } from '@/lib/render/coverage-image'
 import { useStore } from '@/store'
 
-/* 1°×1° tile snapped to degree grid, centered on (lat, lon). */
-function tileBbox(lat: number, lon: number): Bbox {
-  const clat = Math.floor(lat) + 0.5
-  const clon = Math.floor(lon) + 0.5
-  return { west: clon - 0.5, south: clat - 0.5, east: clon + 0.5, north: clat + 0.5 }
+/*
+ * Compute the SPLAT! tile region from selected sites and max range.
+ * Returns a bbox covering all integer-degree tiles SPLAT! will load.
+ */
+function tileRegion(sites: { latitude: number; longitude: number }[], rangeKm: number): Bbox | null {
+  if (sites.length === 0) return null
+  const degPerKm = 1 / 111.0
+  let minTileLat = Infinity, maxTileLat = -Infinity
+  let minTileLon = Infinity, maxTileLon = -Infinity
+  for (const s of sites) {
+    const dLat = rangeKm * degPerKm
+    const cosLat = Math.cos(s.latitude * Math.PI / 180)
+    const dLon = cosLat > 0.01 ? rangeKm * degPerKm / cosLat : rangeKm * degPerKm / 0.01
+    minTileLat = Math.min(minTileLat, Math.floor(s.latitude - dLat))
+    maxTileLat = Math.max(maxTileLat, Math.floor(s.latitude + dLat))
+    minTileLon = Math.min(minTileLon, Math.floor(s.longitude - dLon))
+    maxTileLon = Math.max(maxTileLon, Math.floor(s.longitude + dLon))
+  }
+  return {
+    west: minTileLon,
+    south: minTileLat,
+    east: maxTileLon + 1,
+    north: maxTileLat + 1,
+  }
 }
 
 interface MeshMapProps {
   sites?: CandidateSite[]
   selectedSiteNames?: string[]
   coverageImage?: CoverageImageResult | null
-  bbox?: Bbox | null
-  onBboxSelect?: (bbox: Bbox) => void
   onMapClick?: (lat: number, lon: number) => void
   /** When true, map click places a new site instead of normal click behavior */
   placing?: boolean
@@ -37,8 +54,6 @@ interface MeshMapProps {
   onUpdateSitePosition?: (name: string, lat: number, lon: number) => void
   style?: React.CSSProperties
 }
-
-const LONG_PRESS_MS = 500
 
 const TOPO_STYLE: StyleSpecification = {
   version: 8,
@@ -61,8 +76,6 @@ export function MeshMap({
   sites = [],
   selectedSiteNames = [],
   coverageImage: coverageImg,
-  bbox: externalBbox,
-  onBboxSelect,
   onMapClick,
   placing = false,
   onPlaceSite,
@@ -79,32 +92,29 @@ export function MeshMap({
     longitude: -82.5,
     zoom: 10,
   })
-  /* Derive the grid-snapped 1°×1° tile from the first selected site. */
-  const firstSite = sites.find(s => selectedSiteNames.includes(s.name))
-  const tileFromSite = useMemo(() => firstSite ? tileBbox(firstSite.latitude, firstSite.longitude) : null, [firstSite])
-  const defaultBbox: Bbox = tileFromSite ?? { west: -83, south: 35, east: -82, north: 36 }
-  const [bbox, setBbox] = useState<Bbox | null>(defaultBbox)
-  const [drawing, setDrawing] = useState(false)
-  const [drawStart, setDrawStart] = useState<{
-    lat: number
-    lng: number
-  } | null>(null)
+  const bbox = useStore((s) => s.bbox)
+  const setBbox = useStore((s) => s.setBbox)
+  const maxRangeKm = useStore((s) => s.coverageParams.maxRangeKm)
 
-  /* ── Touch long-press bbox drawing state ── */
-  const [touchDrawing, setTouchDrawing] = useState(false)
-  const touchDrawingRef = useRef(false)
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const touchStartPoint = useRef<{ x: number; y: number } | null>(null)
-  const touchDrawStart = useRef<{ lat: number; lng: number } | null>(null)
-
-  const clearLongPress = useCallback(() => {
-    if (longPressTimer.current !== null) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
+  /* ── Auto-compute bbox from selected sites + max range ── */
+  const selectedSites = useMemo(
+    () => sites.filter((s) => selectedSiteNames.includes(s.name)),
+    [sites, selectedSiteNames],
+  )
+  const autoBbox = useMemo(
+    () => tileRegion(selectedSites.length > 0 ? selectedSites : sites, maxRangeKm ?? 30),
+    [selectedSites, sites, maxRangeKm],
+  )
+  const [initialised, setInitialised] = useState(false)
+  useEffect(() => {
+    if (!initialised && autoBbox) {
+      setBbox(autoBbox)
+      setInitialised(true)
     }
-  }, [])
-
-  useEffect(() => clearLongPress, [clearLongPress])
+  }, [autoBbox, setBbox, initialised])
+  useEffect(() => {
+    if (initialised && autoBbox) setBbox(autoBbox)
+  }, [autoBbox, setBbox, initialised])
 
   /* ── Coverage heatmap image overlay ── */
   const prevCoverageImgRef = useRef<CoverageImageResult | null>(null)
@@ -173,16 +183,6 @@ export function MeshMap({
     img.src = terrainImg.url
   }, [showTerrain, terrainImg])
 
-  /* ── Sync external bbox (from sidebar) into local state ── */
-  useEffect(() => {
-    if (externalBbox) setBbox(externalBbox)
-  }, [externalBbox])
-
-  /* ── Sync initial default bbox to store on mount ── */
-  useEffect(() => {
-    if (!externalBbox) onBboxSelect?.(defaultBbox)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
   /* ── Escape key cancels placing mode ── */
   useEffect(() => {
     if (!placing) return
@@ -202,44 +202,15 @@ export function MeshMap({
     el.style.cursor = placing ? 'crosshair' : ''
   }, [placing])
 
-  /* ── Mouse handlers (desktop Shift+Click bbox) ── */
-
+  /* ── Map event handlers ── */
   const handleMoveEnd = useCallback((e: ViewStateChangeEvent) => {
     const vp = e.viewState
     setViewport(vp)
     useStore.getState().setViewport({ latitude: vp.latitude, longitude: vp.longitude, zoom: vp.zoom })
   }, [])
 
-  const handleMouseDown = useCallback(
-    (e: MapLayerMouseEvent) => {
-      if (e.originalEvent.shiftKey && !placing) {
-        setDrawing(true)
-        setDrawStart({ lat: e.lngLat.lat, lng: e.lngLat.lng })
-      }
-    },
-    [placing],
-  )
-
-  const handleMouseUp = useCallback(
-    (e: MapLayerMouseEvent) => {
-      if (drawing && drawStart) {
-        // Use the midpoint of the drag to select the containing tile
-        const midLat = (drawStart.lat + e.lngLat.lat) / 2
-        const midLng = (drawStart.lng + e.lngLat.lng) / 2
-        const newBbox = tileBbox(midLat, midLng)
-        setBbox(newBbox)
-        onBboxSelect?.(newBbox)
-        setDrawing(false)
-        setDrawStart(null)
-      }
-    },
-    [drawing, drawStart, onBboxSelect],
-  )
-
   const handleClick = useCallback(
     (e: MapLayerMouseEvent) => {
-      if (drawing) return
-      // Skip click if user just finished dragging a marker
       if (draggingRef.current) {
         draggingRef.current = false
         return
@@ -250,7 +221,7 @@ export function MeshMap({
       }
       onMapClick?.(e.lngLat.lat, e.lngLat.lng)
     },
-    [drawing, placing, onPlaceSite, onMapClick],
+    [placing, onPlaceSite, onMapClick],
   )
 
   /* ── Marker drag handlers ── */
@@ -270,98 +241,11 @@ export function MeshMap({
     (name: string, e: MarkerDragEvent) => {
       onUpdateSitePosition?.(name, e.lngLat.lat, e.lngLat.lng)
       setDragging(false)
-      // draggingRef stays true — handleClick will consume and suppress it
     },
     [onUpdateSitePosition],
   )
 
-  /* ── Touch handlers (mobile long-press + drag bbox) ── */
-
-  const handleTouchStart = useCallback(
-    (e: MapLayerTouchEvent) => {
-      if (placing) return
-      const touch = e.originalEvent.changedTouches?.[0]
-      if (!touch) return
-      touchStartPoint.current = { x: touch.clientX, y: touch.clientY }
-      longPressTimer.current = setTimeout(() => {
-        touchDrawingRef.current = true
-        setTouchDrawing(true)
-        touchDrawStart.current = { lat: e.lngLat.lat, lng: e.lngLat.lng }
-        setDrawing(true)
-        setDrawStart({ lat: e.lngLat.lat, lng: e.lngLat.lng })
-      }, LONG_PRESS_MS)
-    },
-    [placing],
-  )
-
-  const handleTouchMove = useCallback(
-    (e: MapLayerTouchEvent) => {
-      const touch = e.originalEvent.changedTouches?.[0]
-      if (!touch) return
-
-      if (touchDrawingRef.current) {
-        // In drawing mode — prevent map pan/zoom
-        e.originalEvent.preventDefault()
-        return
-      }
-
-      // Cancel long-press if finger moved > 10px from start
-      if (touchStartPoint.current) {
-        const dx = touch.clientX - touchStartPoint.current.x
-        const dy = touch.clientY - touchStartPoint.current.y
-        if (dx * dx + dy * dy > 100) {
-          clearLongPress()
-          touchStartPoint.current = null
-        }
-      }
-    },
-    [clearLongPress],
-  )
-
-  const handleTouchEnd = useCallback(
-    (e: MapLayerTouchEvent) => {
-      clearLongPress()
-      touchStartPoint.current = null
-
-      if (touchDrawingRef.current && touchDrawStart.current) {
-        touchDrawingRef.current = false
-        setTouchDrawing(false)
-        const midLat = (touchDrawStart.current.lat + e.lngLat.lat) / 2
-        const midLng = (touchDrawStart.current.lng + e.lngLat.lng) / 2
-        const newBbox = tileBbox(midLat, midLng)
-        setBbox(newBbox)
-        onBboxSelect?.(newBbox)
-        setDrawing(false)
-        setDrawStart(null)
-        touchDrawStart.current = null
-      }
-    },
-    [onBboxSelect, clearLongPress],
-  )
-
-  /* ── Bbox corner drag — snaps the 1°×1° tile to the grid ── */
-  const handleBboxCornerDragEnd = useCallback(
-    (_corner: string, e: MarkerDragEvent) => {
-      const next = tileBbox(e.lngLat.lat, e.lngLat.lng)
-      // Use queueMicrotask to break out of React's render cycle
-      queueMicrotask(() => onBboxSelect?.(next))
-      setBbox(next)
-      setDragging(false)
-    },
-    [onBboxSelect],
-  )
-
   const selectedSet = new Set(selectedSiteNames)
-
-  /* ── Bbox corner positions ── */
-  const bboxCorners = bbox && !drawing
-    ? [
-        { id: 'sw', lat: bbox.south, lng: bbox.west },
-        { id: 'nw', lat: bbox.north, lng: bbox.west },
-        { id: 'se', lat: bbox.south, lng: bbox.east },
-        { id: 'ne', lat: bbox.north, lng: bbox.east },
-      ]
-    : []
 
   return (
     <div
@@ -376,14 +260,9 @@ export function MeshMap({
       <Map
         ref={mapRef}
         {...viewport}
-        dragPan={!touchDrawing && !dragging}
+        dragPan={!dragging}
         onMoveEnd={handleMoveEnd}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
         onClick={handleClick}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
         mapStyle={TOPO_STYLE}
         attributionControl={true}
         style={style ?? { width: '100%', height: '100%' }}
@@ -417,8 +296,8 @@ export function MeshMap({
           )
         })}
 
-        {/* Bbox rectangle — outline only */}
-        {bbox && !drawing && (
+        {/* Bbox rectangle — display-only, matches SPLAT! tile region */}
+        {bbox && (
           <Source
             id="bbox"
             type="geojson"
@@ -442,38 +321,10 @@ export function MeshMap({
             <Layer
               id="bbox-outline"
               type="line"
-              paint={{ 'line-color': '#3388ff', 'line-width': 2 }}
+              paint={{ 'line-color': '#3388ff', 'line-width': 2, 'line-dasharray': [4, 3] }}
             />
           </Source>
         )}
-
-        {/* Bbox corner handles — draggable to resize */}
-        {bboxCorners.map((c) => (
-          <Marker
-            key={c.id}
-            latitude={c.lat}
-            longitude={c.lng}
-            draggable
-            onDragStart={handleDragStart}
-            onDragEnd={(e) => handleBboxCornerDragEnd(c.id, e)}
-            style={{ zIndex: 5, cursor: 'nwse-resize' }}
-          >
-          <div
-            style={{
-              width: 14,
-              height: 14,
-              background: '#3388ff',
-              border: '2px solid white',
-              borderRadius: 2,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-              cursor: 'inherit',
-              margin: '-7px 0 0 -7px',
-              transform: 'rotate(45deg)',
-            }}
-          />
-          </Marker>
-        ))}
-
       </Map>
     </div>
   )

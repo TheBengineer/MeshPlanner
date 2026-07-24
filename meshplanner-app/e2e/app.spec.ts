@@ -24,6 +24,8 @@ async function setTinyCoverageParams(page: Page) {
       targetCoverage: 0.5,
     })
   })
+  // Wait for the auto-bbox to recompute from the new range
+  await page.waitForTimeout(100)
 }
 
 /** Add a site named "TestSite" via the SiteForm. */
@@ -32,15 +34,6 @@ async function addSite(page: Page) {
   await page.getByTestId('site-lat-input').fill('35.595')
   await page.getByTestId('site-lon-input').fill('-82.555')
   await page.getByTestId('site-add-btn').click()
-}
-
-/** Set a tiny bounding box via the BboxSelector so the DEM is tiny (3×4 px). */
-async function setTinyBbox(page: Page) {
-  await page.getByTestId('bbox-west').fill('-82.556')
-  await page.getByTestId('bbox-south').fill('35.594')
-  await page.getByTestId('bbox-east').fill('-82.554')
-  await page.getByTestId('bbox-north').fill('35.596')
-  await page.getByTestId('bbox-apply').click()
 }
 
 /** Serve a pre-built GeoTIFF fixture for DEM tile requests instead of
@@ -90,7 +83,6 @@ test.describe('MeshPlanner E2E', () => {
   test('2. Coverage computation — add site, compute, overlay on map', async ({ page }) => {
     await addSite(page)
     await setTinyCoverageParams(page)
-    await setTinyBbox(page)
 
     await page.getByTestId('compute-btn').click()
 
@@ -123,7 +115,6 @@ test.describe('MeshPlanner E2E', () => {
   test('3. Optimization — results visible after compute', async ({ page }) => {
     await addSite(page)
     await setTinyCoverageParams(page)
-    await setTinyBbox(page)
 
     await page.getByTestId('compute-btn').click()
 
