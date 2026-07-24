@@ -341,33 +341,28 @@ export class WasmCoverageEngine implements CoverageEngine {
           const reg = ctx.region()
           const cells = reg.width * reg.height
           const dbm = new Float32Array(cells)
-          const ippd = params.resolutionIppd ?? 1200
           let minEl = Infinity, maxEl = -Infinity
-          for (let r = 0; r < reg.height; r++) {
-            const lat = reg.north - (r + 0.5) * (1 / ippd)
-            for (let c = 0; c < reg.width; c++) {
-              const lon = reg.west + (c + 0.5) * (1 / ippd)
-              const ref = refs.find(
-                (rf) => lat >= rf.minNorth && lat < rf.minNorth + 1 && lon >= -(rf.minWest + 1) && lon < -rf.minWest,
-              )
-              if (ref) {
-                const pi = refs.indexOf(ref)
-                const pg = pages[pi]
-                if (pg) {
-                  const pgWest = -(ref.minWest + 1)
-                  const pc = Math.round((lon - pgWest) * ippd)
-                  const pr = Math.round((ref.minNorth + 1 - lat) * ippd)
-                  if (pc >= 0 && pc < ippd && pr >= 0 && pr < ippd) {
-                    const el = pg[pr * ippd + pc]!
-                    dbm[r * reg.width + c] = el
-                    if (el < minEl) minEl = el
-                    if (el > maxEl) maxEl = el
-                  }
-                }
+          for (let pi = 0; pi < refs.length; pi++) {
+            const ref = refs[pi]!
+            const pg = pages[pi]
+            if (!pg) continue
+            const pgWest = -(ref.minWest + 1)
+            const pcOffset = Math.round((pgWest - reg.west) * ippd)
+            const prOffset = Math.round((reg.north - ref.minNorth - 1) * ippd)
+            for (let pr = 0; pr < ippd; pr++) {
+              const r = prOffset + pr
+              if (r < 0 || r >= reg.height) continue
+              for (let pc = 0; pc < ippd; pc++) {
+                const c = pcOffset + pc
+                if (c < 0 || c >= reg.width) continue
+                const el = pg[pr * ippd + pc]!
+                dbm[r * reg.width + c] = el
+                if (el < minEl) minEl = el
+                if (el > maxEl) maxEl = el
               }
             }
           }
-          console.log(`[SPLAT-DEBUG] Terrain elevation: ${minEl.toFixed(1)} to ${maxEl.toFixed(1)} m`)
+          console.log(`[SPLAT-DEBUG] Terrain: ${minEl.toFixed(1)} to ${maxEl.toFixed(1)} m, ${cells} cells`)
           report({ phase: 'finalize', completed: 1, total: 1, fraction: 1 })
           return {
             dbm, width: reg.width, height: reg.height,
