@@ -242,10 +242,38 @@ export function ComputePanel() {
       const rasters = [...rasterMap.values()]
       const combined = combineCoverage(rasters, "best")
 
-      // ── Step 4: Threshold mask + GeoJSON overlay ──
+      // ── Step 4: Clip coverage to bbox (sim area extends beyond user bbox) ──
       setProgress({ current: 3, total: 4, label: "Building map overlay…" })
-      const mask = combineAtThreshold([combined], threshold, "any")
-      const maskLen = combined.width * combined.height
+      const clipAff = combined.affine
+      const [c0, r0] = clipAff.geoToPixel(bbox.west, bbox.north)
+      const [c1, r1] = clipAff.geoToPixel(bbox.east, bbox.south)
+      const colStart = Math.max(0, Math.floor(Math.min(c0, c1)))
+      const colEnd = Math.min(combined.width, Math.ceil(Math.max(c0, c1)))
+      const rowStart = Math.max(0, Math.floor(Math.min(r0, r1)))
+      const rowEnd = Math.min(combined.height, Math.ceil(Math.max(r0, r1)))
+      const clipW = colEnd - colStart
+      const clipH = rowEnd - rowStart
+      const clipped: CoverageRaster = {
+        rssi: new Float32Array(clipW * clipH),
+        width: clipW, height: clipH,
+        affine: new Affine(clipAff.a, 0, clipAff.c + clipAff.a * colStart, 0, clipAff.e, clipAff.f + clipAff.e * rowStart),
+        txLat: combined.txLat,
+        txLon: combined.txLon,
+        params: combined.params,
+        maxRangeKm: combined.maxRangeKm,
+        numRadials: combined.numRadials,
+      }
+      for (let r = 0; r < clipH; r++) {
+        const srcRow = rowStart + r
+        clipped.rssi.set(
+          combined.rssi.subarray(srcRow * combined.width + colStart, srcRow * combined.width + colEnd),
+          r * clipW,
+        )
+      }
+
+      // ── Step 5: Threshold mask + GeoJSON overlay ──
+      const mask = combineAtThreshold([clipped], threshold, "any")
+      const maskLen = clipped.width * clipped.height
       let coveredCells = 0
       for (let i = 0; i < maskLen; i++) {
         const val = mask[i]
@@ -254,12 +282,12 @@ export function ComputePanel() {
       const coveredFraction = maskLen > 0 ? coveredCells / maskLen : 0
 
       const coverageGeoJson = rasterToCoverageGeoJson(
-        mask, combined.width, combined.height, combined.affine, 4,
+        mask, clipped.width, clipped.height, clipped.affine, 4,
       )
       setCoverageGeoJson(coverageGeoJson)
 
       // Generate heatmap image overlay (colormapped, Mercator-corrected)
-      const img = coverageImage(combined, {
+      const img = coverageImage(clipped, {
         colormap,
           minDbm: threshold - 30,
           maxDbm: -80,
