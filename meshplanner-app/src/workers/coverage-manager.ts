@@ -1,12 +1,20 @@
 import { Affine } from "../lib/math/affine"
 import { destinationPoint, haversineDistance, bearing } from "../lib/math/geodetic"
 import { angularInterpolate } from "../lib/math/interpolation"
+import { yieldToEventLoop } from "../lib/math/async"
 import type { CoverageRaster, LoraParams } from "../lib/types"
 import { useStore } from "../store"
 
 /* ── Fallback: main-thread computation when Workers are unavailable ── */
 
 import { computeCoverageRaster as computeMainThread } from "../lib/propagation/coverage"
+
+/* ── Ported from meshtastic-site-planner: run options ── */
+
+export interface CoverageRunOptions {
+  signal?: AbortSignal
+  onPhase?: (phase: string, done: number, total: number) => void
+}
 
 /* ── Ported from meshtastic-site-planner: contiguous radial slices ── */
 
@@ -116,11 +124,16 @@ function fillCoverageGaps(
 /* ── Public API ── */
 
 /**
- * Compute a coverage RSSI raster for a single transmitter using Web Workers.
+ * Compute a coverage RSSI raster for a single transmitter.
  *
- * Splits radials into contiguous slices across workers (ported from
- * meshtastic-site-planner), merges via first-touch (earlier slices win),
- * then fills coverage gaps via angular interpolation.
+ * Uses Web Workers when available; falls back to yielding main-thread
+ * computation (keeping UI responsive) when Workers are unavailable.
+ *
+ * Ported approach from meshtastic-site-planner:
+ * - Contiguous radial slices across workers
+ * - First-touch merge (earlier slices win)
+ * - Angular interpolation gap-filling with distance-window search
+ * - yieldToEventLoop between chunks for responsiveness + cancellation
  */
 export async function computeCoverageWithWorkers(
   demData: Float32Array,
@@ -132,41 +145,64 @@ export async function computeCoverageWithWorkers(
   params: LoraParams,
   maxRangeKm: number = 30,
   numRadials: number = 360,
+  opts: CoverageRunOptions = {},
 ): Promise<CoverageRaster> {
+  const signal = opts.signal
   const setProgress = useStore.getState().setProgress
 
-  // ---- Fallback: Worker API unavailable --------------------------------
+  const throwIfAborted = () => { if (signal?.aborted) throw new DOMException('aborted', 'AbortError') }
+
+  // ---- Phased progress helper (ported from meshtastic) ------------------
+  const YIELD_EVERY = 8
+  const setPhase = (phase: string, done: number, total: number) => {
+    opts.onPhase?.(phase, done, total)
+    setProgress({ current: done, total, label: `${phase}… ${done}/${total}` })
+  }
+
+  // ---- Main-thread fallback with yielding (keeps UI responsive) ---------
   if (typeof Worker === "undefined") {
-    setProgress({ current: 0, total: 1, label: "Workers unavailable, using main thread…" })
-    const raster = computeMainThread(
-      demData,
-      demWidth,
-      demHeight,
-      demAffine,
-      txLat,
-      txLon,
-      params,
-      maxRangeKm,
-      numRadials,
-    )
+    setPhase('Computing coverage (no workers)', 0, numRadials)
+    const rssi = await new Promise<CoverageRaster>((resolve, reject) => {
+      let cancelled = false
+      const onAbort = () => { cancelled = true }
+      signal?.addEventListener('abort', onAbort, { once: true })
+      ;(async () => {
+        const raster = computeMainThread(
+          demData, demWidth, demHeight, demAffine,
+          txLat, txLon, params, maxRangeKm, numRadials,
+          (ri, total) => {
+            if (cancelled) return
+            if (ri % YIELD_EVERY === 0 || ri === total - 1)
+              setPhase('Computing coverage', ri + 1, total)
+          },
+        )
+        if (!cancelled) resolve(raster); else reject(new DOMException('aborted', 'AbortError'))
+        signal?.removeEventListener('abort', onAbort)
+      })()
+    })
+
+    setPhase('Filling gaps', numRadials, numRadials)
+    fillCoverageGaps(rssi.rssi, demWidth, demHeight, demAffine, txLat, txLon, maxRangeKm, numRadials)
     setProgress(null)
-    return raster
+    return rssi
   }
 
   // ---- Determine worker count and distribution (sliced, ported from meshtastic) ---
   const numWorkers = Math.min(navigator.hardwareConcurrency || 4, numRadials)
   const slices = sliceRadials(numRadials, numWorkers)
 
-  setProgress({
-    current: 0,
-    total: numRadials,
-    label: `Starting ${slices.length} workers…`,
-  })
+  setPhase('Starting workers', 0, numRadials)
 
   const workers: Worker[] = []
   const workerPromises: Promise<WorkerRaster>[] = []
   const workerProgressMap = new Map<number, number>()
   let globalProgress = 0
+
+  // ---- Cancellation support (ported from meshtastic) --------------------
+  let settled = false
+  const cancelAll = () => {
+    for (const w of workers) w.postMessage({ type: 'cancel' })
+  }
 
   // ---- Spawn workers ---------------------------------------------------
   for (let wi = 0; wi < slices.length; wi++) {
@@ -182,19 +218,8 @@ export async function computeCoverageWithWorkers(
     } catch (err) {
       console.warn("Worker creation failed, falling back to main thread:", err)
       for (const w of workers) w.terminate()
-      setProgress({ current: 0, total: 1, label: "Falling back to main thread…" })
-      const raster = computeMainThread(
-        demData,
-        demWidth,
-        demHeight,
-        demAffine,
-        txLat,
-        txLon,
-        params,
-        maxRangeKm,
-        numRadials,
-      )
-      setProgress(null)
+      setPhase('Falling back to main thread', 0, 1)
+      const raster = await computeCoverageWithWorkers(demData, demWidth, demHeight, demAffine, txLat, txLon, params, maxRangeKm, numRadials, opts)
       return raster
     }
 
@@ -209,21 +234,14 @@ export async function computeCoverageWithWorkers(
           const delta = (data.radialsDone as number) - prev
           workerProgressMap.set(wi, data.radialsDone as number)
           globalProgress += delta
-          setProgress({
-            current: Math.min(globalProgress, numRadials),
-            total: numRadials,
-            label: `Computing coverage… ${Math.min(globalProgress, numRadials)}/${numRadials} radials`,
-          })
+          setPhase('Computing coverage', Math.min(globalProgress, numRadials), numRadials)
         } else if (data.type === "result") {
           resolve({ signal: data.signal as Float32Array, mask: data.mask as Uint8Array })
         }
       }
 
       worker.onerror = (ev: Event | string) => {
-        const msg =
-          typeof ev === "string"
-            ? ev
-            : (ev as ErrorEvent).message ?? "Unknown worker error"
+        const msg = typeof ev === "string" ? ev : (ev as ErrorEvent).message ?? "Unknown worker error"
         reject(new Error(`Worker error: ${msg}`))
       }
 
@@ -237,52 +255,44 @@ export async function computeCoverageWithWorkers(
     const demCopy = new Float32Array(demData)
     worker.postMessage(
       {
-        demData: demCopy,
-        demWidth,
-        demHeight,
-        demAffine,
-        txLat,
-        txLon,
-        params,
-        radialStart: start,
-        radialCount: count,
-        maxRangeKm,
-        numRadials,
+        demData: demCopy, demWidth, demHeight, demAffine,
+        txLat, txLon, params,
+        radialStart: start, radialCount: count,
+        maxRangeKm, numRadials,
       },
       [demCopy.buffer],
     )
   }
 
+  // ---- Abort handler ----------------------------------------------------
+  const onAbort = () => {
+    if (settled) return
+    cancelAll()
+    for (const w of workers) w.terminate()
+  }
+  signal?.addEventListener('abort', onAbort, { once: true })
+
   // ---- Wait for all workers to complete ---------------------------------
   let partials: WorkerRaster[]
   try {
+    throwIfAborted()
     partials = await Promise.all(workerPromises)
   } catch (err) {
-    console.warn("Worker computation failed, falling back to main thread:", err)
+    cancelAll()
     for (const w of workers) w.terminate()
-    setProgress({ current: 0, total: 1, label: "Falling back to main thread…" })
-    const raster = computeMainThread(
-      demData,
-      demWidth,
-      demHeight,
-      demAffine,
-      txLat,
-      txLon,
-      params,
-      maxRangeKm,
-      numRadials,
-    )
-    setProgress(null)
+    settled = true
+    signal?.removeEventListener('abort', onAbort)
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+    console.warn("Worker computation failed, falling back to main thread:", err)
+    const raster = await computeCoverageWithWorkers(demData, demWidth, demHeight, demAffine, txLat, txLon, params, maxRangeKm, numRadials, opts)
     return raster
   }
+  settled = true
+  signal?.removeEventListener('abort', onAbort)
 
   // ---- First-touch merge (ported from meshtastic) -----------------------
   const pixelCount = demWidth * demHeight
-  setProgress({
-    current: numRadials,
-    total: numRadials,
-    label: "Merging worker results…",
-  })
+  setPhase('Merging results', numRadials, numRadials)
   const merged = mergeFirstTouch(partials, pixelCount)
 
   const rssi = new Float32Array(pixelCount)
@@ -291,35 +301,16 @@ export async function computeCoverageWithWorkers(
   }
 
   // ---- Fill gap pixels between radials ----------------------------------
-  setProgress({
-    current: numRadials,
-    total: numRadials,
-    label: "Filling coverage gaps…",
-  })
-  fillCoverageGaps(
-    rssi,
-    demWidth,
-    demHeight,
-    demAffine,
-    txLat,
-    txLon,
-    maxRangeKm,
-    numRadials,
-  )
+  setPhase('Filling gaps', numRadials, numRadials)
+  fillCoverageGaps(rssi, demWidth, demHeight, demAffine, txLat, txLon, maxRangeKm, numRadials)
 
   // ---- Cleanup ----------------------------------------------------------
   for (const w of workers) w.terminate()
   setProgress(null)
 
   return {
-    rssi,
-    width: demWidth,
-    height: demHeight,
+    rssi, width: demWidth, height: demHeight,
     affine: new Affine(demAffine.a, 0, demAffine.c, 0, demAffine.e, demAffine.f),
-    txLat,
-    txLon,
-    params,
-    maxRangeKm,
-    numRadials,
+    txLat, txLon, params, maxRangeKm, numRadials,
   }
 }

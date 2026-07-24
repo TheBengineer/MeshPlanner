@@ -1,3 +1,4 @@
+import { yieldToEventLoop } from "../math/async"
 import { extractProfile } from "./profile"
 import { computePathLoss } from "./itm"
 import { calculateLinkBudget } from "../math/link-budget"
@@ -16,6 +17,7 @@ export function computeCoverageRaster(
   params: LoraParams,
   maxRangeKm: number = 30,
   numRadials: number = 360,
+  onRadial?: (ri: number, total: number) => void,
 ): CoverageRaster {
   const rssi = new Float32Array(demWidth * demHeight).fill(-Infinity)
   const stepKm = 0.2
@@ -53,6 +55,7 @@ export function computeCoverageRaster(
       const budget = calculateLinkBudget(params, plResult.pathLossDb)
       rssi[idx] = budget.rxPowerDbm
     }
+    onRadial?.(ri, numRadials)
   }
 
   /* ── Gap-filling: interpolate between radials, searching nearby distances ── */
