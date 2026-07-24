@@ -1,16 +1,26 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Bbox } from '@/lib/types'
 
 interface BboxSelectorProps {
+  bbox: Bbox | null
   onBboxChange: (bbox: Bbox) => void
-  initialBbox?: Bbox
 }
 
-export function BboxSelector({ onBboxChange, initialBbox }: BboxSelectorProps) {
-  const [west, setWest] = useState(String(initialBbox?.west ?? -82.6))
-  const [south, setSouth] = useState(String(initialBbox?.south ?? 35.5))
-  const [east, setEast] = useState(String(initialBbox?.east ?? -82.4))
-  const [north, setNorth] = useState(String(initialBbox?.north ?? 35.7))
+export function BboxSelector({ bbox, onBboxChange }: BboxSelectorProps) {
+  const [west, setWest] = useState(String(bbox?.west ?? -82.6))
+  const [south, setSouth] = useState(String(bbox?.south ?? 35.5))
+  const [east, setEast] = useState(String(bbox?.east ?? -82.4))
+  const [north, setNorth] = useState(String(bbox?.north ?? 35.7))
+
+  /* Sync from external bbox (e.g. corner drag on map) */
+  useEffect(() => {
+    if (bbox) {
+      setWest(String(bbox.west))
+      setSouth(String(bbox.south))
+      setEast(String(bbox.east))
+      setNorth(String(bbox.north))
+    }
+  }, [bbox])
 
   const handleApply = () => {
     const bbox: Bbox = {

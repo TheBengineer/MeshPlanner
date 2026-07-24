@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback } from 'react'
+import { lazy, Suspense, useCallback, useRef } from 'react'
 import { BboxSelector } from '@/components/map/BboxSelector'
 import { SiteList } from '@/components/sidebar/SiteList'
 import { SiteForm } from '@/components/sidebar/SiteForm'
@@ -19,9 +19,27 @@ export default function App() {
     sidebarOpen, setSidebarOpen,
     mode,
     sites, addSite, removeSite, clearSites,
-    setBbox, setMode, toggleSiteSelection, selectedSiteNames,
+    updateSitePosition,
+    bbox, setBbox, setMode, toggleSiteSelection, selectedSiteNames,
     coverageGeoJson, updateCoverageParams,
+    placing, setPlacing,
   } = useStore()
+
+  const placeCounter = useRef(0)
+
+  const handlePlaceSite = useCallback((lat: number, lon: number) => {
+    placeCounter.current += 1
+    const name = `Site ${placeCounter.current}`
+    addSite({ name, latitude: lat, longitude: lon })
+  }, [addSite])
+
+  const handleTogglePlacing = useCallback(() => {
+    setPlacing(!placing)
+  }, [placing, setPlacing])
+
+  const handleCancelPlacing = useCallback(() => {
+    setPlacing(false)
+  }, [setPlacing])
 
   const handleFileUpload = (content: string, filename: string) => {
     try {
@@ -87,11 +105,37 @@ export default function App() {
           </label>
         </div>
 
-        <BboxSelector onBboxChange={setBbox} />
+        <BboxSelector bbox={bbox} onBboxChange={setBbox} />
 
         <div className="sidebar-section sidebar-section--padded">
           <div className="section-label">Sites</div>
           <SiteForm onAddSite={addSite} />
+
+          {/* Place button — toggles placing mode */}
+          <button
+            type="button"
+            data-testid="place-btn"
+            onClick={handleTogglePlacing}
+            aria-label={placing ? 'Cancel placing mode' : 'Place sites on map'}
+            aria-pressed={placing}
+            style={{
+              width: '100%',
+              marginTop: 6,
+              padding: '6px 10px',
+              fontSize: 12,
+              fontWeight: 600,
+              border: placing ? '1px solid var(--accent)' : '1px solid var(--border)',
+              borderRadius: 4,
+              cursor: 'pointer',
+              background: placing ? 'var(--accent)' : 'var(--bg)',
+              color: placing ? '#fff' : 'var(--text-h)',
+              transition: 'background 0.15s, border-color 0.15s',
+              boxShadow: placing ? '0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent)' : 'none',
+            }}
+          >
+            {placing ? 'Placing… (click map)  Esc to cancel' : '📍 Place Sites'}
+          </button>
+
           <FileUpload onFile={handleFileUpload} label="Upload CSV/GeoJSON" />
           <SiteList
             sites={sites}
@@ -120,6 +164,12 @@ export default function App() {
             sites={sites}
             selectedSiteNames={selectedSiteNames}
             coverageGeoJson={coverageGeoJson ?? undefined}
+            bbox={bbox}
+            onBboxSelect={setBbox}
+            placing={placing}
+            onPlaceSite={handlePlaceSite}
+            onCancelPlacing={handleCancelPlacing}
+            onUpdateSitePosition={updateSitePosition}
           />
         </Suspense>
       </div>

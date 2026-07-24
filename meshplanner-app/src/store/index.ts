@@ -10,6 +10,7 @@ export interface SitesSlice {
   selectedSiteNames: string[]
   addSite: (site: CandidateSite) => void
   removeSite: (name: string) => void
+  updateSitePosition: (name: string, lat: number, lon: number) => void
   toggleSite: (name: string) => void
   toggleSiteSelection: (name: string) => void
   clearSites: () => void
@@ -53,10 +54,12 @@ export interface UISlice {
   mode: AppMode
   sidebarOpen: boolean
   computing: boolean
+  placing: boolean
   progress: { current: number; total: number; label: string } | null
   setMode: (mode: AppMode) => void
   setSidebarOpen: (open: boolean) => void
   setComputing: (v: boolean) => void
+  setPlacing: (v: boolean) => void
   setProgress: (p: { current: number; total: number; label: string } | null) => void
 }
 
@@ -101,8 +104,8 @@ export type AppStore = SitesSlice & ParamsSlice & MapSlice & UISlice & ResultsSl
 
 export const useStore = create<AppStore>((set, get) => ({
   /* Sites */
-  sites: [],
-  selectedSiteNames: [],
+  sites: [{ name: 'Site 1', latitude: 35.5950145, longitude: -82.5550532 }],
+  selectedSiteNames: ['Site 1'],
 
   addSite: (site) =>
     set((s) => ({
@@ -114,6 +117,13 @@ export const useStore = create<AppStore>((set, get) => ({
     set((s) => ({
       sites: s.sites.filter((x) => x.name !== name),
       selectedSiteNames: s.selectedSiteNames.filter((x) => x !== name),
+    })),
+
+  updateSitePosition: (name, lat, lon) =>
+    set((s) => ({
+      sites: s.sites.map((site) =>
+        site.name === name ? { ...site, latitude: lat, longitude: lon } : site,
+      ),
     })),
 
   toggleSite: (name) =>
@@ -171,11 +181,13 @@ export const useStore = create<AppStore>((set, get) => ({
   mode: "single",
   sidebarOpen: window.innerWidth >= 768,
   computing: false,
+  placing: false,
   progress: null,
 
   setMode: (mode) => set({ mode }),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setComputing: (v) => set({ computing: v }),
+  setPlacing: (v) => set({ placing: v }),
   setProgress: (p) => set({ progress: p }),
 
   /* Results */
