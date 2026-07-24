@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { calculateLinkBudget, SF_SENSITIVITY, BAND_CENTERS } from '@/lib/math/link-budget'
 import type { LoraParams } from '@/lib/types'
 import { useStore } from '@/store'
@@ -32,6 +32,39 @@ const DEVICE_PROFILES: DeviceProfile[] = [
   { label: 'Station G2', txPowerDbm: 30, txGainDbi: 3 },
   { label: 'Seeed SenseCAP T1000-E', txPowerDbm: 22, txGainDbi: 1 },
 ]
+
+/* Track which fields belong to each collapsible section for dirty indicators. */
+type SectionId = 'lora' | 'tx' | 'rx' | 'sim' | 'optimization' | 'env'
+
+interface FormSnapshot {
+  band: string; sf: number
+  txPower: number; txHeight: number; txGain: number; cableLossTx: number
+  rxHeight: number; rxGain: number; rxSensitivity: number; cableLossRx: number
+  maxRange: number; threshold: number; situationFraction: number; timeFraction: number; highRes: boolean
+  mode: string; target: number
+  climate: number; polarization: number; groundPermittivity: number
+  groundConductivity: number; surfaceRefractivity: number; clutterHeight: number
+}
+
+const EMPTY_SNAPSHOT: FormSnapshot = {
+  band: '', sf: 0,
+  txPower: 0, txHeight: 0, txGain: 0, cableLossTx: 0,
+  rxHeight: 0, rxGain: 0, rxSensitivity: 0, cableLossRx: 0,
+  maxRange: 0, threshold: 0, situationFraction: 0, timeFraction: 0, highRes: false,
+  mode: '', target: 0,
+  climate: 0, polarization: 0, groundPermittivity: 0,
+  groundConductivity: 0, surfaceRefractivity: 0, clutterHeight: 0,
+}
+
+/* Which snapshot keys belong to each section. */
+const SECTION_FIELDS: Record<SectionId, (keyof FormSnapshot)[]> = {
+  lora: ['band', 'sf'],
+  tx: ['txPower', 'txHeight', 'txGain', 'cableLossTx'],
+  rx: ['rxHeight', 'rxGain', 'rxSensitivity', 'cableLossRx'],
+  sim: ['maxRange', 'threshold', 'situationFraction', 'timeFraction', 'highRes'],
+  optimization: ['mode', 'target'],
+  env: ['climate', 'polarization', 'groundPermittivity', 'groundConductivity', 'surfaceRefractivity', 'clutterHeight'],
+}
 
 interface LoraParamsFormProps {
   onParamsChange?: (params: LoraParams, coverageKwargs: Record<string, number | boolean>) => void
@@ -82,6 +115,27 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
   const [optimizationOpen, setOptimizationOpen] = useState(true)
   const [envOpen, setEnvOpen] = useState(false)
 
+  /* Dirty-state tracking snapshot (set on Apply). */
+  const snapRef = useRef<FormSnapshot>(EMPTY_SNAPSHOT)
+  const [snap, setSnap] = useState<FormSnapshot | null>(null)
+
+  const current: FormSnapshot = {
+    band, sf, txPower, txHeight, txGain, cableLossTx,
+    rxHeight, rxGain, rxSensitivity, cableLossRx,
+    maxRange, threshold, situationFraction, timeFraction, highRes,
+    mode, target,
+    climate, polarization, groundPermittivity, groundConductivity, surfaceRefractivity, clutterHeight,
+  }
+
+  const isDirty = snap !== null && SECTION_FIELDS.lora.concat(
+    ...Object.values(SECTION_FIELDS),
+  ).some((k) => current[k] !== snap[k])
+
+  const sectionDirty = (id: SectionId): boolean => {
+    if (!snap) return false
+    return SECTION_FIELDS[id].some((k) => current[k] !== snap[k])
+  }
+
   const toggle = (setter: (v: boolean) => void, current: boolean) =>
     (e: React.KeyboardEvent | React.MouseEvent) => {
       if ('key' in e && (e as React.KeyboardEvent).key !== 'Enter' && (e as React.KeyboardEvent).key !== ' ') return
@@ -120,29 +174,54 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
   const budget = calculateLinkBudget(params, 140)
 
   const handleApply = useCallback(() => {
+    snapRef.current = current
+    setSnap({ ...current })
     onParamsChange?.(params, { maxRangeKm: maxRange, numRadials: 360, stepKm: 0.1, numWorkers: 4, threshold, targetCoverage: target, highRes, clutterHeightM: clutterHeight })
   }, [params, maxRange, threshold, mode, target, highRes, clutterHeight, onParamsChange])
 
-  const sectionHeader = (label: string, open: boolean, toggleFn: (e: any) => void, testId: string) => (
-    <div
-      role="button"
-      tabIndex={0}
-      data-testid={testId}
-      onClick={toggleFn}
-      onKeyDown={toggleFn}
-      aria-expanded={open}
-      aria-label={`Toggle ${label}`}
-      style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid var(--border)', fontWeight: 600, fontSize: 13, cursor: 'pointer', userSelect: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-    >
-      {label}
-      <span style={{ transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }} aria-hidden="true">▶</span>
-    </div>
-  )
+  /* When compute completes, re-snapshot so the dirty state resets. */
+  const computing = useStore((s) => s.computing)
+  const prevComputing = useRef(computing)
+  useEffect(() => {
+    if (prevComputing.current && !computing && snapRef.current !== EMPTY_SNAPSHOT) {
+      snapRef.current = current
+      setSnap({ ...current })
+    }
+    prevComputing.current = computing
+  })
+
+  const sectionHeader = (label: string, id: SectionId, open: boolean, toggleFn: (e: any) => void, testId: string) => {
+    const dirty = sectionDirty(id)
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        data-testid={testId}
+        onClick={toggleFn}
+        onKeyDown={toggleFn}
+        aria-expanded={open}
+        aria-label={`Toggle ${label}`}
+        style={{
+          marginTop: 8, paddingTop: 6, borderTop: '1px solid var(--border)',
+          fontWeight: 600, fontSize: 13, cursor: 'pointer', userSelect: 'none',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {dirty && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />}
+          {label}
+        </span>
+        <span style={{ transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }} aria-hidden="true">▶</span>
+      </div>
+    )
+  }
+
+  const btnDirty = isDirty
 
   return (
     <div style={{ padding: '8px', fontSize: '13px' }}>
       {/* ── LoRa / PHY ── */}
-      {sectionHeader('LoRa / PHY', loraOpen, toggle(setLoraOpen, loraOpen), 'lora-toggle')}
+      {sectionHeader('LoRa / PHY', 'lora', loraOpen, toggle(setLoraOpen, loraOpen), 'lora-toggle')}
       {loraOpen && (<div style={{ marginTop: 4 }}>
         <label style={{ display: 'block', marginBottom: 6 }}>
           Band
@@ -159,7 +238,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
       </div>)}
 
       {/* ── Transmitter ── */}
-      {sectionHeader('Transmitter', txOpen, toggle(setTxOpen, txOpen), 'transmitter-toggle')}
+      {sectionHeader('Transmitter', 'tx', txOpen, toggle(setTxOpen, txOpen), 'transmitter-toggle')}
       {txOpen && (<div style={{ marginTop: 4 }}>
         <label style={{ display: 'block', marginBottom: 6 }}>
           Device (optional)
@@ -191,7 +270,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
       </div>)}
 
       {/* ── Receiver ── */}
-      {sectionHeader('Receiver', rxOpen, toggle(setRxOpen, rxOpen), 'receiver-toggle')}
+      {sectionHeader('Receiver', 'rx', rxOpen, toggle(setRxOpen, rxOpen), 'receiver-toggle')}
       {rxOpen && (<div style={{ marginTop: 4 }}>
         <div style={{ marginBottom: 6 }}>Sensitivity: {rxSensitivity} dBm
           <input type="range" min={-150} max={-80} value={rxSensitivity} onChange={e => setRxSensitivity(Number(e.target.value))} style={{ width: '100%' }} aria-label="Receiver sensitivity" />
@@ -211,7 +290,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
       </div>)}
 
       {/* ── Simulation ── */}
-      {sectionHeader('Simulation', simOpen, toggle(setSimOpen, simOpen), 'simulation-toggle')}
+      {sectionHeader('Simulation', 'sim', simOpen, toggle(setSimOpen, simOpen), 'simulation-toggle')}
       {simOpen && (<div style={{ marginTop: 4 }}>
         <div style={{ marginBottom: 6 }}>Max Range: {maxRange} km
           <input type="range" min={1} max={highRes ? 70 : 150} value={maxRange} onChange={e => setMaxRange(Number(e.target.value))} style={{ width: '100%' }} aria-label="Maximum range" />
@@ -231,7 +310,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
       </div>)}
 
       {/* ── Optimization ── */}
-      {sectionHeader('Optimization', optimizationOpen, toggle(setOptimizationOpen, optimizationOpen), 'optimization-toggle')}
+      {sectionHeader('Optimization', 'optimization', optimizationOpen, toggle(setOptimizationOpen, optimizationOpen), 'optimization-toggle')}
       {optimizationOpen && (<div style={{ marginTop: 4 }}>
         <label>Mode
           <select value={mode} onChange={e => setMode(e.target.value as any)} style={{ marginLeft: 8 }} aria-label="Optimization mode">
@@ -247,7 +326,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
       </div>)}
 
       {/* ── Environment ── */}
-      {sectionHeader('Environment', envOpen, toggle(setEnvOpen, envOpen), 'env-toggle')}
+      {sectionHeader('Environment', 'env', envOpen, toggle(setEnvOpen, envOpen), 'env-toggle')}
       {envOpen && (<div style={{ marginTop: 4 }}>
         <label style={{ display: 'block', marginBottom: 6 }}>
           Climate Zone
@@ -282,7 +361,34 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
         </label>
       </div>)}
 
-      <button data-testid="apply-params-btn" onClick={handleApply} style={{ marginTop: 8, width: '100%', padding: '4px 8px' }} type="button">Apply Parameters</button>
+      {/* ── Apply ── */}
+      <style>{`
+        @keyframes pulse-glow {
+          0% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb, 52, 152, 219), 0.5); }
+          70% { box-shadow: 0 0 0 8px rgba(var(--accent-rgb, 52, 152, 219), 0); }
+          100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb, 52, 152, 219), 0); }
+        }
+      `}</style>
+      <button
+        data-testid="apply-params-btn"
+        onClick={handleApply}
+        type="button"
+        style={{
+          marginTop: 8,
+          width: '100%',
+          padding: '6px 8px',
+          fontWeight: btnDirty ? 700 : 500,
+          background: btnDirty ? 'var(--accent)' : 'var(--bg-secondary)',
+          color: btnDirty ? '#fff' : 'var(--text)',
+          border: btnDirty ? 'none' : '1px solid var(--border)',
+          borderRadius: 4,
+          cursor: 'pointer',
+          animation: btnDirty ? 'pulse-glow 2s infinite' : 'none',
+          transition: 'background 0.2s, color 0.2s, font-weight 0.2s',
+        }}
+      >
+        {btnDirty ? 'Apply Changes' : 'Apply Parameters'}
+      </button>
     </div>
   )
 }
