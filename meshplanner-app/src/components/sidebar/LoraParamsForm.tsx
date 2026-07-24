@@ -26,6 +26,10 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
   const [mode, setMode] = useState<'min-sites' | 'max-coverage'>('min-sites')
   const [target, setTarget] = useState(0.95)
 
+  /* Collapse state */
+  const [paramsOpen, setParamsOpen] = useState(true)
+  const [optimizationOpen, setOptimizationOpen] = useState(true)
+
   /* Advanced ITM parameters */
   const [climate, setClimate] = useState(5)
   const [polarization, setPolarization] = useState(1)
@@ -62,42 +66,71 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
 
   return (
     <div style={{ padding: '8px', fontSize: '13px' }}>
-      <div style={{ fontWeight: 600, marginBottom: 8 }}>LoRa Parameters</div>
-      
-      <label style={{ display: 'block', marginBottom: 6 }}>
-        Band
-        <select value={band} onChange={e => setBand(e.target.value)} style={{ marginLeft: 8 }} aria-label="Frequency band">
-          {Object.keys(BAND_CENTERS).map(b => <option key={b} value={b}>{b} ({BAND_CENTERS[b]} MHz)</option>)}
-        </select>
-      </label>
-      
-      <label style={{ display: 'block', marginBottom: 6 }}>
-        Spreading Factor
-        <select value={sf} onChange={e => setSf(Number(e.target.value))} style={{ marginLeft: 8 }} aria-label="Spreading factor">
-          {[7,8,9,10,11,12].map(v => <option key={v}>SF{v}</option>)}
-        </select>
-      </label>
-      
-      <div style={{ marginBottom: 6 }}>TX Power: {txPower} dBm
-        <input type="range" min={0} max={30} value={txPower} onChange={e => setTxPower(Number(e.target.value))} style={{ width: '100%' }} aria-label="Transmit power in dBm" />
-      </div>
-      
-      <div style={{ marginBottom: 6 }}>Max Range: {maxRange} km
-        <input type="range" min={5} max={100} value={maxRange} onChange={e => setMaxRange(Number(e.target.value))} style={{ width: '100%' }} aria-label="Maximum range in kilometers" />
-      </div>
-      
-      <div style={{ marginBottom: 6 }}>Threshold: {threshold} dBm
-        <input type="range" min={-150} max={-80} value={threshold} onChange={e => setThreshold(Number(e.target.value))} style={{ width: '100%' }} aria-label="RSSI threshold in dBm" />
-      </div>
-      
-      <div style={{ marginTop: 8, padding: 6, background: 'var(--bg-secondary)', borderRadius: 4, fontSize: 12, border: '1px solid var(--border)', color: 'var(--text)' }}>
-        <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-h)' }}>Link Budget (140 dB loss)</div>
-        <div>EIRP: {budget.txEirpDbm} dBm | RX: {budget.rxPowerDbm} dBm</div>
-        <div>Margin: <span style={{ color: budget.isFeasible ? 'var(--accent)' : '#ef4444', fontWeight: 600 }}>{budget.marginDb} dB</span></div>
+      {/* LoRa Parameters — collapsible */}
+      <div
+        role="button"
+        tabIndex={0}
+        data-testid="params-toggle"
+        onClick={() => setParamsOpen(v => !v)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setParamsOpen(v => !v) } }}
+        aria-expanded={paramsOpen}
+        aria-label="Toggle LoRa parameters"
+        style={{ fontWeight: 600, fontSize: 13, cursor: 'pointer', userSelect: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: paramsOpen ? 8 : 0 }}
+      >
+        LoRa Parameters
+        <span style={{ transition: 'transform 0.2s', transform: paramsOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} aria-hidden="true">▶</span>
       </div>
 
-      <div style={{ marginTop: 8 }}>
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>Optimization</div>
+      {paramsOpen && (<>
+        <label style={{ display: 'block', marginBottom: 6 }}>
+          Band
+          <select value={band} onChange={e => setBand(e.target.value)} style={{ marginLeft: 8 }} aria-label="Frequency band">
+            {Object.keys(BAND_CENTERS).map(b => <option key={b} value={b}>{b} ({BAND_CENTERS[b]} MHz)</option>)}
+          </select>
+        </label>
+
+        <label style={{ display: 'block', marginBottom: 6 }}>
+          Spreading Factor
+          <select value={sf} onChange={e => setSf(Number(e.target.value))} style={{ marginLeft: 8 }} aria-label="Spreading factor">
+            {[7,8,9,10,11,12].map(v => <option key={v}>SF{v}</option>)}
+          </select>
+        </label>
+
+        <div style={{ marginBottom: 6 }}>TX Power: {txPower} dBm
+          <input type="range" min={0} max={30} value={txPower} onChange={e => setTxPower(Number(e.target.value))} style={{ width: '100%' }} aria-label="Transmit power in dBm" />
+        </div>
+
+        <div style={{ marginBottom: 6 }}>Max Range: {maxRange} km
+          <input type="range" min={5} max={100} value={maxRange} onChange={e => setMaxRange(Number(e.target.value))} style={{ width: '100%' }} aria-label="Maximum range in kilometers" />
+        </div>
+
+        <div style={{ marginBottom: 6 }}>Threshold: {threshold} dBm
+          <input type="range" min={-150} max={-80} value={threshold} onChange={e => setThreshold(Number(e.target.value))} style={{ width: '100%' }} aria-label="RSSI threshold in dBm" />
+        </div>
+
+        <div style={{ marginTop: 8, padding: 6, background: 'var(--bg-secondary)', borderRadius: 4, fontSize: 12, border: '1px solid var(--border)', color: 'var(--text)' }}>
+          <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-h)' }}>Link Budget (140 dB loss)</div>
+          <div>EIRP: {budget.txEirpDbm} dBm | RX: {budget.rxPowerDbm} dBm</div>
+          <div>Margin: <span style={{ color: budget.isFeasible ? 'var(--accent)' : '#ef4444', fontWeight: 600 }}>{budget.marginDb} dB</span></div>
+        </div>
+      </>)}
+
+      {/* Optimization — collapsible */}
+      <div
+        role="button"
+        tabIndex={0}
+        data-testid="optimization-toggle"
+        onClick={() => setOptimizationOpen(v => !v)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOptimizationOpen(v => !v) } }}
+        aria-expanded={optimizationOpen}
+        aria-label="Toggle optimization settings"
+        style={{ marginTop: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer', userSelect: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+      >
+        Optimization
+        <span style={{ transition: 'transform 0.2s', transform: optimizationOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} aria-hidden="true">▶</span>
+      </div>
+
+      {optimizationOpen && (<div style={{ marginTop: 4 }}>
         <label>Mode
           <select value={mode} onChange={e => setMode(e.target.value as any)} style={{ marginLeft: 8 }} aria-label="Optimization mode">
             <option value="min-sites">Min Sites</option>
@@ -109,7 +142,7 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
             <input type="range" min={0.5} max={1} step={0.05} value={target} onChange={e => setTarget(Number(e.target.value))} style={{ width: '100%' }} aria-label="Coverage target percentage" />
           </div>
         )}
-      </div>
+      </div>)}
       
       {/* Advanced ITM Parameters — collapsible */}
       <div style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
