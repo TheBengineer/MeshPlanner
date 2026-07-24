@@ -38,9 +38,13 @@ export interface CoverageParams {
 export interface ParamsSlice {
   params: LoraParams
   coverageParams: CoverageParams
+  /** Flat key-value store mirroring all user-configurable settings for easy serialization. */
+  settings: Record<string, any>
   linkBudget: LinkBudget | null
   updateParams: (partial: Partial<LoraParams>) => void
   updateCoverageParams: (partial: Partial<CoverageParams>) => void
+  /** Update a single setting by key (syncs to typed fields automatically). */
+  setSetting: (key: string, value: any) => void
   recalcLinkBudget: (pathLossDb?: number) => void
 }
 
@@ -175,18 +179,33 @@ export const useStore = create<AppStore>((set, get) => ({
     timeFraction: 95,
     debugTerrain: false,
   },
+  settings: {},
   linkBudget: null,
 
   updateParams: (partial) =>
     set((s) => {
       const params = { ...s.params, ...partial }
-      return { params, linkBudget: null }
+      return { params, linkBudget: null, settings: { ...s.settings, ...partial } }
     }),
 
   updateCoverageParams: (partial) =>
     set((s) => ({
       coverageParams: { ...s.coverageParams, ...partial },
+      settings: { ...s.settings, ...partial },
     })),
+
+  setSetting: (key, value) =>
+    set((s) => {
+      // Update settings map and sync to the appropriate typed field
+      const settings = { ...s.settings, [key]: value }
+      // Check if it's a LoraParams field
+      const loraKeys: (keyof LoraParams)[] = ['frequencyMhz', 'spreadingFactor', 'txPowerDbm', 'txHeightM', 'rxHeightM', 'txAntennaGainDbi', 'rxAntennaGainDbi', 'rxSensitivityDbm', 'bandwidthHz', 'requiredMarginDb', 'cableLossTxDb', 'cableLossRxDb', 'climate', 'polarization', 'groundPermittivity', 'groundConductivity', 'surfaceRefractivity']
+      if ((loraKeys as string[]).includes(key)) {
+        return { settings, params: { ...s.params, [key]: value }, linkBudget: null }
+      }
+      // Otherwise treat it as a coverage param
+      return { settings, coverageParams: { ...s.coverageParams, [key]: value } }
+    }),
 
   recalcLinkBudget: (pathLossDb = 140) =>
     set((s) => ({
@@ -221,7 +240,7 @@ export const useStore = create<AppStore>((set, get) => ({
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setComputing: (v) => set({ computing: v }),
   setPlacing: (v) => set({ placing: v }),
-  setColormap: (v) => set({ colormap: v }),
+  setColormap: (v) => set((s) => ({ colormap: v, settings: { ...s.settings, colormap: v } })),
   setShowTerrain: (v) => set({ showTerrain: v }),
   setProgress: (p) => set({ progress: p }),
 

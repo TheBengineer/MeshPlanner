@@ -49,25 +49,16 @@ export default function App() {
     if (state.s.length > 0 || state.b) {
       if (state.s.length > 0) {
         s.loadSites(state.s)
-        // Restore selection
         if (state.sn.length > 0) {
           useStore.setState({ selectedSiteNames: state.sn })
         }
       }
       if (state.b) s.setBbox(state.b)
-      if (state.p) {
-        const merged: any = {}
-        for (const [key, val] of Object.entries(state.p)) {
-          if (val !== undefined) merged[key] = val
+      // Restore settings key-value map — auto-distributes to typed fields
+      if (state.kv && Object.keys(state.kv).length > 0) {
+        for (const [key, val] of Object.entries(state.kv)) {
+          if (val !== undefined) s.setSetting(key, val)
         }
-        if (Object.keys(merged).length > 0) s.updateParams(merged)
-      }
-      if (state.cp) useStore.setState({ coverageParams: { ...s.coverageParams, ...state.cp } })
-      else {
-        // Legacy restore (single-field coverage attrs)
-        if ((state as any).r) useStore.setState({ coverageParams: { ...s.coverageParams, maxRangeKm: (state as any).r } })
-        if ((state as any).t) useStore.setState({ coverageParams: { ...s.coverageParams, threshold: (state as any).t } })
-        if ((state as any).tc) useStore.setState({ coverageParams: { ...s.coverageParams, targetCoverage: (state as any).tc } })
       }
       if (state.c) s.setColormap(state.c)
       if (state.m) s.setMode(state.m)
@@ -81,8 +72,13 @@ export default function App() {
       clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         const state = useStore.getState()
-        const persisted = extractState(state)
-        // Include viewport
+        const persisted = extractState({
+          sites: state.sites,
+          selectedSiteNames: state.selectedSiteNames,
+          mode: state.mode,
+          bbox: state.bbox,
+          settings: state.settings,
+        })
         persisted.vp = {
           lat: state.viewport.latitude,
           lon: state.viewport.longitude,
