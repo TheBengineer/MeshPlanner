@@ -6,8 +6,11 @@ import { greedyMinSites } from "@/lib/optimize/greedy"
 import { buildCoverageMatrix } from "@/lib/optimize/matrix"
 import { warmStartMinSites } from "@/lib/optimize/warmstart"
 import { computeCoverageWithWorkers } from "@/workers/coverage-manager"
+import { WasmCoverageEngine } from "@/engine/WasmCoverageEngine"
 import { coverageImage } from "@/lib/render/coverage-image"
 import type { CoverageRaster, OptimizationResult } from "@/lib/types"
+import type { EngineRunParams } from "@/engine/core"
+import { Affine } from "@/lib/math/affine"
 import { useStore } from "@/store"
 
 function isMobileOrLowMemory(): boolean {
@@ -84,6 +87,12 @@ export function ComputePanel() {
     setOptimizationPhase,
   ])
 
+  const engineRef = useRef<WasmCoverageEngine | null>(null)
+  const getEngine = () => {
+    if (!engineRef.current) engineRef.current = new WasmCoverageEngine()
+    return engineRef.current
+  }
+
   const handleCompute = useCallback(async () => {
     if (computeInFlight.current) return
     if (!bbox) { setError("Draw or enter a bounding box first"); return }
@@ -125,11 +134,51 @@ export function ComputePanel() {
       const rasterMap = new Map<string, CoverageRaster>()
       for (const site of selectedSites) {
         try {
-          const raster = await computeCoverageWithWorkers(
-            dem.data, dem.width, dem.height, demAffine,
-            site.latitude, site.longitude,
-            params, maxRangeKm, numRadials,
-          )
+          // Use SPLAT! WASM engine for propagation
+          const engineParams: EngineRunParams = {
+            lat: site.latitude,
+            lon: site.longitude,
+            txHeightM: params.txHeightM,
+            rxHeightM: params.rxHeightM,
+            frequencyMhz: params.frequencyMhz,
+            txPowerDbm: params.txPowerDbm,
+            txAntennaGainDbi: params.txAntennaGainDbi,
+            rxAntennaGainDbi: params.rxAntennaGainDbi,
+            rxSensitivityDbm: params.rxSensitivityDbm,
+            bandwidthHz: params.bandwidthHz,
+            requiredMarginDb: params.requiredMarginDb,
+            cableLossTxDb: params.cableLossTxDb,
+            cableLossRxDb: params.cableLossRxDb,
+            climate: params.climate ?? 5,
+            polarization: params.polarization ?? 1,
+            groundPermittivity: params.groundPermittivity ?? 15,
+            groundConductivity: params.groundConductivity ?? 0.005,
+            surfaceRefractivity: params.surfaceRefractivity ?? 314,
+            radiusKm: maxRangeKm,
+            numRadials,
+          }
+
+          const engine = getEngine()
+          const result = await engine.run(engineParams, {
+            demData: dem.data,
+            demWidth: dem.width,
+            demHeight: dem.height,
+            demAffine,
+          })
+
+          // Convert CoverageResult to CoverageRaster
+          const pixelDeg = result.pixelDegrees
+          const raster: CoverageRaster = {
+            rssi: result.dbm,
+            width: result.width,
+            height: result.height,
+            affine: new Affine(pixelDeg, 0, result.bounds.west, 0, -pixelDeg, result.bounds.north),
+            txLat: site.latitude,
+            txLon: site.longitude,
+            params,
+            maxRangeKm,
+            numRadials,
+          }
           rasterMap.set(site.name, raster)
         } catch (workerErr) {
           const msg = workerErr instanceof Error ? workerErr.message : "Worker computation failed"
