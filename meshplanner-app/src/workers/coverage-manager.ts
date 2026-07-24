@@ -8,37 +8,50 @@ import { useStore } from "../store"
 
 import { computeCoverageRaster as computeMainThread } from "../lib/propagation/coverage"
 
-/* ── Internal helpers ── */
+/* ── Ported from meshtastic-site-planner: contiguous radial slices ── */
 
-/**
- * Merge several partial RSSI rasters by taking the element-wise maximum.
- * Each worker's partial raster only has non-Infinity values where its
- * assigned radials hit; the rest remain -Infinity. Merging with max picks
- * the strongest signal at each pixel across all radials.
- */
-function mergeRasters(partials: Float32Array[], pixelCount: number): Float32Array {
-  const merged = new Float32Array(pixelCount)
-  for (let i = 0; i < pixelCount; i++) {
-    merged[i] = -Infinity
-  }
+function sliceRadials(total: number, workers: number): { start: number; end: number }[] {
+  const n = Math.max(1, Math.min(workers, total))
+  const per = Math.ceil(total / n)
+  const slices: { start: number; end: number }[] = []
+  for (let start = 0; start < total; start += per)
+    slices.push({ start, end: Math.min(start + per, total) })
+  return slices
+}
 
-  for (const partial of partials) {
-    for (let i = 0; i < pixelCount; i++) {
-      const v = partial[i]
-      if (v !== undefined && v > (merged[i] ?? -Infinity)) {
-        merged[i] = v
-      }
-    }
-  }
-  return merged
+interface WorkerRaster {
+  signal: Float32Array
+  mask: Uint8Array
 }
 
 /**
- * Fill pixels between radials via angular interpolation.
- *
- * For every pixel that lies within range but wasn't directly hit by a
- * radial sample, interpolate the RSSI from the two nearest radials on
- * either side of the bearing from the transmitter.
+ * Ported from meshtastic-site-planner's merge.ts.
+ * First-touch merge: workers process contiguous radial slices, and
+ * merging in ascending slice order with "first set wins" reproduces the
+ * single-threaded result — any pixel a later slice computed that an
+ * earlier slice also computed is overridden by the earlier slice's value.
+ */
+function mergeFirstTouch(parts: WorkerRaster[], cells: number): { signal: Float32Array; mask: Uint8Array } {
+  const signal = new Float32Array(cells)
+  const mask = new Uint8Array(cells)
+  for (let i = 0; i < cells; i++) signal[i] = -Infinity
+
+  for (const part of parts) {
+    if (part.signal.length !== cells || part.mask.length !== cells)
+      throw new Error('worker raster size mismatch')
+    for (let i = 0; i < cells; i++) {
+      if ((mask[i]! & 248) === 0 && (part.mask[i]! & 248) !== 0) {
+        mask[i] = part.mask[i]!
+        signal[i] = part.signal[i]!
+      }
+    }
+  }
+  return { signal, mask }
+}
+
+/**
+ * Fill pixels between radials via angular interpolation, searching nearby
+ * distance steps to handle the 0.2 km quantization of the radial sweep.
  */
 function fillCoverageGaps(
   rssi: Float32Array,
@@ -79,7 +92,7 @@ function fillCoverageGaps(
       const lon = demAffine.c + col * demAffine.a
       const lat = demAffine.f + row * demAffine.e
       const dist = haversineDistance(txLat, txLon, lat, lon)
-      if (dist > maxRangeKm || dist < 0.1) continue
+      if (dist > maxRangeKm || dist < 0.001) continue
 
       const bear = bearing(txLat, txLon, lat, lon)
       const radialIdx = Math.floor(bear / anglePerRadial) % numRadials
@@ -105,12 +118,9 @@ function fillCoverageGaps(
 /**
  * Compute a coverage RSSI raster for a single transmitter using Web Workers.
  *
- * Splits the 360 radials across `navigator.hardwareConcurrency` workers,
- * merges the partial results, fills coverage gaps via angular interpolation,
- * and reports progress to the Zustand store.
- *
- * Falls back to the existing main-thread `computeCoverageRaster` if the
- * Worker API is unavailable or any worker fails.
+ * Splits radials into contiguous slices across workers (ported from
+ * meshtastic-site-planner), merges via first-touch (earlier slices win),
+ * then fills coverage gaps via angular interpolation.
  */
 export async function computeCoverageWithWorkers(
   demData: Float32Array,
@@ -143,25 +153,25 @@ export async function computeCoverageWithWorkers(
     return raster
   }
 
-  // ---- Determine worker count and distribution --------------------------
+  // ---- Determine worker count and distribution (sliced, ported from meshtastic) ---
   const numWorkers = Math.min(navigator.hardwareConcurrency || 4, numRadials)
-  const radialsPerWorker = Math.ceil(numRadials / numWorkers)
+  const slices = sliceRadials(numRadials, numWorkers)
 
   setProgress({
     current: 0,
     total: numRadials,
-    label: `Starting ${numWorkers} workers…`,
+    label: `Starting ${slices.length} workers…`,
   })
 
   const workers: Worker[] = []
-  const workerPromises: Promise<Float32Array>[] = []
-  const workerProgressMap = new Map<Worker, number>()
+  const workerPromises: Promise<WorkerRaster>[] = []
+  const workerProgressMap = new Map<number, number>()
   let globalProgress = 0
 
   // ---- Spawn workers ---------------------------------------------------
-  for (let wi = 0; wi < numWorkers; wi++) {
-    const start = wi * radialsPerWorker
-    const count = Math.min(radialsPerWorker, numRadials - start)
+  for (let wi = 0; wi < slices.length; wi++) {
+    const { start, end } = slices[wi]!
+    const count = end - start
     if (count <= 0) break
 
     let worker: Worker
@@ -189,15 +199,15 @@ export async function computeCoverageWithWorkers(
     }
 
     workers.push(worker)
-    workerProgressMap.set(worker, 0)
+    workerProgressMap.set(wi, 0)
 
-    const promise = new Promise<Float32Array>((resolve, reject) => {
+    const promise = new Promise<WorkerRaster>((resolve, reject) => {
       worker.onmessage = (e: MessageEvent) => {
         const data = e.data
         if (data.type === "progress") {
-          const prev = workerProgressMap.get(worker) ?? 0
+          const prev = workerProgressMap.get(wi) ?? 0
           const delta = (data.radialsDone as number) - prev
-          workerProgressMap.set(worker, data.radialsDone as number)
+          workerProgressMap.set(wi, data.radialsDone as number)
           globalProgress += delta
           setProgress({
             current: Math.min(globalProgress, numRadials),
@@ -205,7 +215,7 @@ export async function computeCoverageWithWorkers(
             label: `Computing coverage… ${Math.min(globalProgress, numRadials)}/${numRadials} radials`,
           })
         } else if (data.type === "result") {
-          resolve(data.rssi as Float32Array)
+          resolve({ signal: data.signal as Float32Array, mask: data.mask as Uint8Array })
         }
       }
 
@@ -224,9 +234,6 @@ export async function computeCoverageWithWorkers(
 
     workerPromises.push(promise)
 
-    // Transfer a fresh copy of the DEM data to each worker (zero-copy
-    // via Transferable). We copy because the original must remain on
-    // the main thread for multiple workers.
     const demCopy = new Float32Array(demData)
     worker.postMessage(
       {
@@ -247,9 +254,9 @@ export async function computeCoverageWithWorkers(
   }
 
   // ---- Wait for all workers to complete ---------------------------------
-  let partialRasters: Float32Array[]
+  let partials: WorkerRaster[]
   try {
-    partialRasters = await Promise.all(workerPromises)
+    partials = await Promise.all(workerPromises)
   } catch (err) {
     console.warn("Worker computation failed, falling back to main thread:", err)
     for (const w of workers) w.terminate()
@@ -267,18 +274,21 @@ export async function computeCoverageWithWorkers(
     )
     setProgress(null)
     return raster
-  } finally {
-    // Workers are terminated after all complete or on error in the catch
   }
 
-  // ---- Merge results ----------------------------------------------------
+  // ---- First-touch merge (ported from meshtastic) -----------------------
   const pixelCount = demWidth * demHeight
   setProgress({
     current: numRadials,
     total: numRadials,
     label: "Merging worker results…",
   })
-  const merged = mergeRasters(partialRasters, pixelCount)
+  const merged = mergeFirstTouch(partials, pixelCount)
+
+  const rssi = new Float32Array(pixelCount)
+  for (let i = 0; i < pixelCount; i++) {
+    rssi[i] = (merged.mask[i]! & 248) !== 0 ? merged.signal[i]! : -Infinity
+  }
 
   // ---- Fill gap pixels between radials ----------------------------------
   setProgress({
@@ -287,7 +297,7 @@ export async function computeCoverageWithWorkers(
     label: "Filling coverage gaps…",
   })
   fillCoverageGaps(
-    merged,
+    rssi,
     demWidth,
     demHeight,
     demAffine,
@@ -302,7 +312,7 @@ export async function computeCoverageWithWorkers(
   setProgress(null)
 
   return {
-    rssi: merged,
+    rssi,
     width: demWidth,
     height: demHeight,
     affine: new Affine(demAffine.a, 0, demAffine.c, 0, demAffine.e, demAffine.f),

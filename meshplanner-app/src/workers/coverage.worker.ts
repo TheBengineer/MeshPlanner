@@ -28,7 +28,10 @@ interface ProgressMessage {
 
 interface ResultMessage {
   type: "result"
-  rssi: Float32Array
+  /** Signal values: dBm+200, 0-255 range. Only valid where mask byte has upper bits set. */
+  signal: Float32Array
+  /** Mask byte: upper 5 bits set = pixel has data. Lower 3 bits = which radial wrote it (0-7). */
+  mask: Uint8Array
   width: number
   height: number
 }
@@ -52,12 +55,24 @@ self.onmessage = (e: MessageEvent<CoverageWorkerInput>) => {
     numRadials,
   } = e.data
 
-  const rssi = new Float32Array(demWidth * demHeight).fill(-Infinity)
+  const pixelCount = demWidth * demHeight
+  const signal = new Float32Array(pixelCount).fill(-Infinity)
+  const mask = new Uint8Array(pixelCount)
   const stepKm = 0.2
+
+  // Compute transmitter pixel explicitly so the center is never empty
+  const txCol = Math.round((txLon - demAffine.c) / demAffine.a)
+  const txRow = Math.round((txLat - demAffine.f) / demAffine.e)
+  if (txCol >= 0 && txCol < demWidth && txRow >= 0 && txRow < demHeight) {
+    const txIdx = txRow * demWidth + txCol
+    signal[txIdx] = params.txPowerDbm + (params.txAntennaGainDbi ?? 0) - (params.cableLossTxDb ?? 0)
+    mask[txIdx] = 248 // all upper bits set = has data
+  }
 
   for (let ri = 0; ri < radialCount; ri++) {
     const globalRi = radialStart + ri
     const angle = (360 * globalRi) / numRadials
+    const radialBit = (globalRi % 8) // lower 3 bits track which radial wrote this pixel
 
     for (let d = stepKm; d <= maxRangeKm; d += stepKm) {
       const [lat, lon] = destinationPoint(txLat, txLon, angle, d)
@@ -66,6 +81,10 @@ self.onmessage = (e: MessageEvent<CoverageWorkerInput>) => {
       const pixCol = Math.round(col)
       const pixRow = Math.round(row)
       if (pixCol < 0 || pixCol >= demWidth || pixRow < 0 || pixRow >= demHeight) continue
+
+      const idx = pixRow * demWidth + pixCol
+      // First-touch: skip if this pixel already has data (mask upper bits set)
+      if ((mask[idx]! & 248) !== 0) continue
 
       const profile = extractProfile(
         demData,
@@ -89,9 +108,9 @@ self.onmessage = (e: MessageEvent<CoverageWorkerInput>) => {
         surfaceRefractivity: params.surfaceRefractivity,
       })
       const budget = calculateLinkBudget(params, plResult.pathLossDb)
-      const idx = pixRow * demWidth + pixCol
-      const existing = rssi[idx] ?? -Infinity
-      rssi[idx] = Math.max(existing, budget.rxPowerDbm)
+      signal[idx] = budget.rxPowerDbm
+      // Store as dBm+200 in the mask's upper bits, radial index in lower 3
+      mask[idx] = (1 << 3) | (radialBit & 7)
     }
 
     // Report progress every 5 radials or on completion
@@ -105,12 +124,13 @@ self.onmessage = (e: MessageEvent<CoverageWorkerInput>) => {
     }
   }
 
-  // Transfer the RSSI buffer back to main thread (zero-copy)
+  // Transfer both buffers back to main thread (zero-copy)
   const msg: ResultMessage = {
     type: "result",
-    rssi,
+    signal,
+    mask,
     width: demWidth,
     height: demHeight,
   }
-  self.postMessage(msg, { transfer: [rssi.buffer] })
+  self.postMessage(msg, { transfer: [signal.buffer, mask.buffer] })
 }

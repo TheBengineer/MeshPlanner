@@ -20,6 +20,13 @@ export function computeCoverageRaster(
   const rssi = new Float32Array(demWidth * demHeight).fill(-Infinity)
   const stepKm = 0.2
 
+  // Compute transmitter pixel explicitly so the center is never empty
+  const txCol = Math.round((txLon - demAffine.c) / demAffine.a)
+  const txRow = Math.round((txLat - demAffine.f) / demAffine.e)
+  if (txCol >= 0 && txCol < demWidth && txRow >= 0 && txRow < demHeight) {
+    rssi[txRow * demWidth + txCol] = params.txPowerDbm + (params.txAntennaGainDbi ?? 0) - (params.cableLossTxDb ?? 0)
+  }
+
   for (let ri = 0; ri < numRadials; ri++) {
     const angle = (360 * ri) / numRadials
     for (let d = stepKm; d <= maxRangeKm; d += stepKm) {
@@ -29,6 +36,9 @@ export function computeCoverageRaster(
       const pixCol = Math.round(col)
       const pixRow = Math.round(row)
       if (pixCol < 0 || pixCol >= demWidth || pixRow < 0 || pixRow >= demHeight) continue
+      const idx = pixRow * demWidth + pixCol
+      // First-touch: skip if this pixel was already computed by an earlier radial
+      if ((rssi[idx] ?? -Infinity) > -Infinity) continue
       const profile = extractProfile(demData, demWidth, demHeight, demAffine, txLat, txLon, lat, lon, 100)
       const plResult = computePathLoss(profile, {
         frequencyMhz: params.frequencyMhz,
@@ -41,9 +51,7 @@ export function computeCoverageRaster(
         surfaceRefractivity: params.surfaceRefractivity,
       })
       const budget = calculateLinkBudget(params, plResult.pathLossDb)
-      const idx = pixRow * demWidth + pixCol
-      const existing = rssi[idx] ?? -Infinity
-      rssi[idx] = Math.max(existing, budget.rxPowerDbm)
+      rssi[idx] = budget.rxPowerDbm
     }
   }
 
@@ -56,7 +64,7 @@ export function computeCoverageRaster(
       const lon = demAffine.c + col * demAffine.a
       const lat = demAffine.f + row * demAffine.e
       const dist = haversineDistance(txLat, txLon, lat, lon)
-      if (dist > maxRangeKm || dist < 0.1) continue
+      if (dist > maxRangeKm || dist < 0.001) continue
       const bear = bearing(txLat, txLon, lat, lon)
       const anglePerRadial = 360 / numRadials
       const radialIdx = Math.floor(bear / anglePerRadial) % numRadials
