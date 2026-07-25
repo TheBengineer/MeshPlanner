@@ -310,9 +310,13 @@ export function MeshMap({
         attributionControl={true}
         style={style ?? { width: '100%', height: '100%' }}
       >
-        {/* Site markers */}
+        {/* Site markers — color by siteType, selected overrides to red */}
         {sites.map((site) => {
           const isSelected = selectedSet.has(site.name)
+          const baseColor = site.siteType === 'existing' ? '#27ae60'
+            : site.siteType === 'required-coverage' ? '#f39c12'
+            : '#3498db'
+          const size = site.siteType === 'required-coverage' ? 28 : 22
           return (
             <Marker
               key={site.name}
@@ -326,10 +330,10 @@ export function MeshMap({
             >
               <div
                 style={{
-                  width: 22,
-                  height: 22,
+                  width: size,
+                  height: size,
                   borderRadius: '50%',
-                  background: isSelected ? '#e74c3c' : '#3498db',
+                  background: isSelected ? '#e74c3c' : baseColor,
                   border: '3px solid white',
                   boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
                   cursor: 'inherit',
@@ -528,6 +532,37 @@ export function MeshMap({
           </Source>
         )}
       </Map>
+
+      {/* ── Site type legend ── */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 12,
+          left: 12,
+          background: 'rgba(255,255,255,0.95)',
+          borderRadius: 8,
+          padding: '8px 12px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+          fontFamily: 'system-ui, sans-serif',
+          fontSize: 12,
+          lineHeight: '20px',
+          zIndex: 10,
+          pointerEvents: 'none',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 12, height: 12, borderRadius: '50%', background: '#27ae60', border: '2px solid white', boxShadow: '0 0 0 1px rgba(0,0,0,0.15)', flexShrink: 0 }} />
+          <span style={{ color: '#333' }}>Existing LoRa Node</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 14, height: 14, borderRadius: '50%', background: '#f39c12', border: '2px solid white', boxShadow: '0 0 0 1px rgba(0,0,0,0.15)', flexShrink: 0 }} />
+          <span style={{ color: '#333' }}>Requires Coverage</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 12, height: 12, borderRadius: '50%', background: '#3498db', border: '2px solid white', boxShadow: '0 0 0 1px rgba(0,0,0,0.15)', flexShrink: 0 }} />
+          <span style={{ color: '#333' }}>Relay Candidate</span>
+        </div>
+      </div>
     </div>
   )
 }
