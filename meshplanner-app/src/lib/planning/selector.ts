@@ -68,6 +68,9 @@ export function selectMeshSites(
   opts?: {
     connBonusWeight?: number
     debug?: boolean
+    /** Per-cell weights for greedy scoring (length = matrix.nCells). When
+     *  provided, the gain from covering a cell is its weight instead of 1. */
+    cellWeights?: Float32Array
   },
 ): MeshSelectorResult {
   const start = performance.now()
@@ -80,6 +83,7 @@ export function selectMeshSites(
   const targetCells = Math.ceil(target * nCells)
   const connWeight = opts?.connBonusWeight ?? 0.3
   const debug = opts?.debug ?? false
+  const cellWeights = opts?.cellWeights
 
   // ── 1. Adjacency set from LOS-clear edges ──────────────────────────────
   const adj: Map<number, Set<number>> = new Map()
@@ -98,7 +102,7 @@ export function selectMeshSites(
 
     for (let i = 0; i < nSites; i++) {
       if (used[i]) continue
-      const gain = countGain(matrix, i, covered)
+      const gain = countGain(matrix, i, covered, cellWeights)
       // Skip zero-gain sites after the first pick (they add no coverage).
       if (gain === 0 && selLen > 0) continue
 
@@ -132,7 +136,7 @@ export function selectMeshSites(
       const prevSel = selected.length - 1
       const lastGain =
         prevSel > 0
-          ? countGain(matrix, selected[prevSel - 1]!, covered)
+          ? countGain(matrix, selected[prevSel - 1]!, covered, cellWeights)
           : 0
       console.log(
         `[selector] iteration ${selected.length}: picked ${name} ` +
@@ -183,12 +187,17 @@ export function selectMeshSites(
  * Count how many NEW cells site `siteIdx` would cover, given the current
  * `covered` bitmask.
  */
-function countGain(matrix: CoverageMatrix, siteIdx: number, covered: Uint8Array): number {
+function countGain(
+  matrix: CoverageMatrix,
+  siteIdx: number,
+  covered: Uint8Array,
+  cellWeights?: Float32Array,
+): number {
   let gain = 0
   const end = matrix.rowPtr[siteIdx + 1]!
   for (let j = matrix.rowPtr[siteIdx]!; j < end; j++) {
     const ci = matrix.colIndices[j]!
-    if (!covered[ci]) gain++
+    if (!covered[ci]) gain += cellWeights ? cellWeights[ci]! : 1
   }
   return gain
 }

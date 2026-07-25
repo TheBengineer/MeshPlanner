@@ -291,6 +291,43 @@ describe("edge cases", () => {
   })
 })
 
+// ── Cell weights ─────────────────────────────────────────────────────────────
+
+describe("cellWeights", () => {
+  it("biases greedy selection toward higher-weight cells", () => {
+    // 2 sites × 3 cells
+    //   Site 0 ─── cells {0}      weight[0] = 100
+    //   Site 1 ─── cells {1, 2}   weight[1] = 1, weight[2] = 1
+    //
+    // Without weights: Site 1 wins (gain 2 > 1)
+    // With weights:    Site 0 wins (gain 100 > 2)
+    const matrix: CoverageMatrix = {
+      rowPtr: new Uint32Array([0, 1, 3]),
+      colIndices: new Uint32Array([0, 1, 2]),
+      nSites: 2,
+      nCells: 3,
+    }
+
+    // Without weights — Site 1 should be first
+    const noWeights = selectMeshSites(matrix, ["A", "B"], [], 0.95)
+    expect(noWeights.selected[0]).toBe(1)
+
+    // With weights — Site 0 (cell 0, weight 100) should be first
+    const weights = new Float32Array([100, 1, 1])
+    const withWeights = selectMeshSites(matrix, ["A", "B"], [], 0.95, {
+      cellWeights: weights,
+    })
+    expect(withWeights.selected[0]).toBe(0)
+  })
+
+  it("is backward compatible when cellWeights is omitted", () => {
+    // Same call as existing tests — must produce identical result.
+    const result = selectMeshSites(matrix3x5(), SITE_NAMES, chainEdges(), 0.8)
+    expect(result.selected.length).toBeGreaterThanOrEqual(2)
+    expect(result.coveredFraction).toBeGreaterThanOrEqual(0.8)
+  })
+})
+
 // ── Kruskal's edge selection ────────────────────────────────────────────────
 
 describe("MST edge specificity", () => {
