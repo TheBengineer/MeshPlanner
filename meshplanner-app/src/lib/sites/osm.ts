@@ -55,6 +55,14 @@ const TAG_SPEC: Record<string, TagSpec> = {
     conditions: [["amenity", "hospital"]],
     label: "Hospital",
   },
+  police: {
+    conditions: [["amenity", "police"]],
+    label: "Police Station",
+  },
+  town_hall: {
+    conditions: [["amenity", "townhall"]],
+    label: "Town Hall",
+  },
   tower: {
     conditions: [["man_made", "tower"]],
     label: "Tower",

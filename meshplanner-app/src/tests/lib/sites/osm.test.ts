@@ -68,10 +68,10 @@ describe("resolveTag", () => {
     expect(r.label).toBe("Communication")
   })
 
-  it("falls back to amenity for unknown identifiers", () => {
+  it("resolves built-in police", () => {
     const r = resolveTag("police")
     expect(r.conditions).toEqual([["amenity", "police"]])
-    expect(r.label).toBe("Police")
+    expect(r.label).toBe("Police Station")
   })
 })
 
@@ -80,18 +80,20 @@ describe("resolveTag", () => {
 describe("parseTags", () => {
   it("returns defaults when called without arguments", () => {
     const tags = parseTags()
-    expect(tags).toHaveLength(5)
+    expect(tags).toHaveLength(7)
     const ids = tags.map((t) => t.label)
     expect(ids).toContain("Fire Station")
     expect(ids).toContain("School")
     expect(ids).toContain("Hospital")
+    expect(ids).toContain("Police Station")
+    expect(ids).toContain("Town Hall")
     expect(ids).toContain("Tower")
     expect(ids).toContain("Water Tower")
   })
 
   it("returns defaults when called with empty array", () => {
     const tags = parseTags([])
-    expect(tags).toHaveLength(5)
+    expect(tags).toHaveLength(7)
   })
 
   it("deduplicates identical conditions", () => {
