@@ -327,7 +327,7 @@ const btnBase: React.CSSProperties = {
   padding: "6px 10px",
   fontSize: 12,
   fontWeight: 600,
-  border: "1px solid #ccc",
+  border: "1px solid var(--border)",
   borderRadius: 4,
   cursor: "pointer",
   textAlign: "left",
@@ -335,8 +335,8 @@ const btnBase: React.CSSProperties = {
 
 const btnDisabled: React.CSSProperties = {
   ...btnBase,
-  background: "#f5f5f5",
-  color: "#aaa",
+  background: "var(--bg-secondary)",
+  color: "var(--text-secondary)",
   cursor: "not-allowed",
 }
 
@@ -440,7 +440,7 @@ export function ExportPanel() {
 
   return (
     <div data-testid="export-panel" style={{ borderTop: "1px solid #ddd", padding: "8px" }}>
-      <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13, color: "#333" }}>
+      <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13, color: "var(--text-h)" }}>
         Export
       </div>
 
@@ -451,7 +451,7 @@ export function ExportPanel() {
           onClick={handleExportGeoJson}
           disabled={!hasResults}
           aria-label="Download results as GeoJSON"
-          style={hasResults ? { ...btnBase, background: "#fff" } : btnDisabled}
+          style={hasResults ? { ...btnBase, background: "var(--bg)" } : btnDisabled}
         >
           Download GeoJSON
         </button>
@@ -462,7 +462,7 @@ export function ExportPanel() {
           onClick={handleExportCsv}
           disabled={!hasResults}
           aria-label="Download results as CSV"
-          style={hasResults ? { ...btnBase, background: "#fff" } : btnDisabled}
+          style={hasResults ? { ...btnBase, background: "var(--bg)" } : btnDisabled}
         >
           Download CSV
         </button>
@@ -473,7 +473,7 @@ export function ExportPanel() {
           onClick={handleExportKml}
           disabled={!hasResults}
           aria-label="Download results as KML"
-          style={hasResults ? { ...btnBase, background: "#fff" } : btnDisabled}
+          style={hasResults ? { ...btnBase, background: "var(--bg)" } : btnDisabled}
         >
           Download KML
         </button>
@@ -484,15 +484,16 @@ export function ExportPanel() {
           onClick={handleExportSummary}
           disabled={!hasResults}
           aria-label="Download summary report"
-          style={hasResults ? { ...btnBase, background: "#fff" } : btnDisabled}
+          style={hasResults ? { ...btnBase, background: "var(--bg)" } : btnDisabled}
         >
           Summary Report
         </button>
       </div>
+    </div>
 
       {meshPlanPhase === "complete" && meshPlanResult && (
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13, color: "#333" }}>
+          <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13, color: "var(--text-h)" }}>
             Export Mesh Plan
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -501,7 +502,7 @@ export function ExportPanel() {
               data-testid="export-mesh-geojson-btn"
               onClick={handleExportMeshGeoJson}
               aria-label="Download mesh plan as GeoJSON"
-              style={{ ...btnBase, background: "#fff" }}
+              style={{ ...btnBase, background: "var(--bg)" }}
             >
               Download Mesh GeoJSON
             </button>
@@ -510,7 +511,7 @@ export function ExportPanel() {
               data-testid="export-mesh-csv-btn"
               onClick={handleExportMeshCsv}
               aria-label="Download mesh plan as CSV"
-              style={{ ...btnBase, background: "#fff" }}
+              style={{ ...btnBase, background: "var(--bg)" }}
             >
               Download Mesh CSV
             </button>
@@ -519,7 +520,7 @@ export function ExportPanel() {
               data-testid="export-mesh-summary-btn"
               onClick={handleExportMeshSummary}
               aria-label="Download mesh plan summary"
-              style={{ ...btnBase, background: "#fff" }}
+              style={{ ...btnBase, background: "var(--bg)" }}
             >
               Mesh Plan Summary
             </button>
