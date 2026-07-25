@@ -65,6 +65,10 @@ const DEFAULT_NUM_RADIALS = 360
  *                        value ≥ candidates.length to process every candidate.
  * @param onProgress      Callback invoked as each site finishes.  Receives
  *                        `(done, total)`.  Useful for driving a progress bar.
+ * @param requiredIndices Indices into `candidates` that must be included in
+ *                        the matrix regardless of their viewshed rank.  Pass
+ *                        an empty array or omit for default behaviour (top N
+ *                        by viewshed rank only).
  */
 export async function buildMeshCoverageMatrix(
   candidates: HilltopScored[],
@@ -76,12 +80,22 @@ export async function buildMeshCoverageMatrix(
   coverageParams: { maxRangeKm: number; threshold: number; numRadials?: number },
   topN?: number,
   onProgress?: (done: number, total: number) => void,
+  requiredIndices?: number[],
 ): Promise<MatrixBuilderResult> {
   const started = performance.now()
   const maxRangeKm = coverageParams.maxRangeKm
   const threshold = coverageParams.threshold
   const numRadials = coverageParams.numRadials ?? DEFAULT_NUM_RADIALS
   const nWanted = topN ?? DEFAULT_TOP_N
+
+  // ── Boost required sites so they survive the top-N cut ────────────────
+  if (requiredIndices !== undefined) {
+    for (const idx of requiredIndices) {
+      if (idx >= 0 && idx < candidates.length) {
+        candidates[idx]!.viewshedRank = Infinity
+      }
+    }
+  }
 
   // ── Sort by viewshed rank descending, take top N ──────────────────────
   const sorted = [...candidates].sort((a, b) => b.viewshedRank - a.viewshedRank)
