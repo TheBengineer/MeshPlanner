@@ -15,14 +15,17 @@ const TABS: { id: TabId; label: string }[] = [
 
 const tabBase: React.CSSProperties = {
   flex: 1,
-  padding: '8px 12px',
-  fontSize: 13,
+  padding: '8px 8px',
+  fontSize: 12,
   fontWeight: 500,
   border: 'none',
   borderRadius: 0,
   cursor: 'pointer',
   transition: 'background 0.15s, color 0.15s',
   outline: 'none',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
 }
 
 const activeTabStyle: React.CSSProperties = {

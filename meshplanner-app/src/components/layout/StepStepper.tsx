@@ -13,7 +13,7 @@ const containerStyle: React.CSSProperties = {
   justifyContent: 'center',
   width: '100%',
   padding: '12px 4px',
-  overflow: 'hidden',
+  flexWrap: 'wrap',
 }
 
 const stepGroupStyle: React.CSSProperties = {
