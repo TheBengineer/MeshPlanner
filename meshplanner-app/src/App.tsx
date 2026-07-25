@@ -6,6 +6,7 @@ import { ExportPanel } from '@/components/export/ExportPanel'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { CriticalInfraImport } from '@/components/common/CriticalInfraImport'
+import { TabBar } from '@/components/layout/TabBar'
 import { parseSitesCsv } from '@/lib/sites/csv'
 import { parseSitesGeoJson } from '@/lib/sites/geojson'
 import { useStore } from '@/store'
@@ -25,6 +26,7 @@ export default function App() {
     setMode, toggleSiteSelection, selectedSiteNames,
     coverageImage, updateCoverageParams,
     placing, setPlacing, coordPlacing, setCoordPlacing, showTerrain, setShowTerrain, showBuildings, setShowBuildings, terrainImage, setTerrainImage,
+    activeTab, setActiveTab,
   } = useStore()
 
   const placeCounter = useRef(0)
@@ -198,6 +200,9 @@ export default function App() {
           <p className="app-subtitle">LoRa Site Planner</p>
         </div>
 
+        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+
+        {activeTab === 'setup' && (
         <div className="sidebar-section sidebar-section--padded">
           <div className="section-label">Sites</div>
           <SiteForm onAddSite={addSite} />
@@ -307,6 +312,7 @@ export default function App() {
             onClearAll={clearSites}
           />
         </div>
+        )}
 
         <ErrorBoundary>
           <Suspense fallback={<div className="sidebar-loading">Loading computation engine…</div>}>
@@ -314,11 +320,13 @@ export default function App() {
           </Suspense>
         </ErrorBoundary>
 
+        {activeTab === 'setup' && (
         <LoraParamsForm onParamsChange={(params, kwargs) => {
           useStore.setState({ params })
           if (kwargs) updateCoverageParams(kwargs)
         }} />
-        <ExportPanel />
+        )}
+        {activeTab === 'results' && <ExportPanel />}
       </div>
 
       <div data-testid="map-area" className="map-area">
