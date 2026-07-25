@@ -33,12 +33,15 @@ export interface LinkBudget {
   isFeasible: boolean
 }
 
+export type SiteType = 'existing' | 'required-coverage' | 'relay-candidate'
+
 export interface CandidateSite {
   name: string
   latitude: number
   longitude: number
   elevationM?: number
   notes?: string
+  siteType?: SiteType
 }
 
 export interface TerrainProfile {
