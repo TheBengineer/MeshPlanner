@@ -7,6 +7,8 @@ import { FileUpload } from '@/components/common/FileUpload'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { CriticalInfraImport } from '@/components/common/CriticalInfraImport'
 import { TabBar } from '@/components/layout/TabBar'
+import { StepStepper } from '@/components/layout/StepStepper'
+import { ModeToggle } from '@/components/layout/ModeToggle'
 import { parseSitesCsv } from '@/lib/sites/csv'
 import { parseSitesGeoJson } from '@/lib/sites/geojson'
 import { useStore } from '@/store'
@@ -27,6 +29,7 @@ export default function App() {
     coverageImage, updateCoverageParams,
     placing, setPlacing, coordPlacing, setCoordPlacing, showTerrain, setShowTerrain, showBuildings, setShowBuildings, terrainImage, setTerrainImage,
     activeTab, setActiveTab,
+    guidedMode,
   } = useStore()
 
   const placeCounter = useRef(0)
@@ -153,6 +156,7 @@ export default function App() {
       <div className="top-bar">
         <h2 data-testid="app-title">MeshPlanner</h2>
         <div className="top-bar__actions">
+          <ModeToggle />
           <select
             value={mode}
             onChange={e => setMode(e.target.value as AppMode)}

@@ -61,6 +61,7 @@ interface LoraParamsFormProps {
 export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
   const storeParams = useStore((s) => s.params)
   const storeCoverage = useStore((s) => s.coverageParams)
+  const guidedMode = useStore((s) => s.guidedMode)
 
   const [band, setBand] = useState(
     Object.entries(BAND_CENTERS).find(([, v]) => v === storeParams.frequencyMhz)?.[0] ?? 'US915',
@@ -90,10 +91,10 @@ export function LoraParamsForm({ onParamsChange }: LoraParamsFormProps) {
   const [clutterHeight, setClutterHeight] = useState(storeCoverage.clutterHeightM ?? 1.0)
 
   const [loraOpen, setLoraOpen] = useState(true)
-  const [txOpen, setTxOpen] = useState(true)
-  const [rxOpen, setRxOpen] = useState(true)
+  const [txOpen, setTxOpen] = useState(!guidedMode)
+  const [rxOpen, setRxOpen] = useState(!guidedMode)
   const [simOpen, setSimOpen] = useState(true)
-  const [optimizationOpen, setOptimizationOpen] = useState(true)
+  const [optimizationOpen, setOptimizationOpen] = useState(!guidedMode)
   const [envOpen, setEnvOpen] = useState(false)
 
   const snapRef = useRef<FormSnapshot | null>(null)
