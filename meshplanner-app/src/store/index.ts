@@ -53,12 +53,14 @@ export interface ParamsSlice {
 
 export interface MapSlice {
   bbox: Bbox | null
+  coverageZone: [number, number][] | null
   coverageGeoJson: GeoJSON.FeatureCollection | null
   coverageImage: CoverageImageResult | null
   terrainImage: TerrainImageResult | null
   viewport: { latitude: number; longitude: number; zoom: number }
   centerOnSite: number
   setBbox: (bbox: Bbox | null) => void
+  setCoverageZone: (zone: [number, number][] | null) => void
   setCoverageGeoJson: (gj: GeoJSON.FeatureCollection | null) => void
   setCoverageImage: (img: CoverageImageResult | null) => void
   setTerrainImage: (img: TerrainImageResult | null) => void
@@ -230,6 +232,7 @@ export const useStore = create<AppStore>((set, get) => ({
 
   /* Map */
   bbox: null,
+  coverageZone: null,
   coverageGeoJson: null,
   coverageImage: null,
   terrainImage: null,
@@ -237,6 +240,7 @@ export const useStore = create<AppStore>((set, get) => ({
   centerOnSite: 0,
 
   setBbox: (bbox) => set({ bbox }),
+  setCoverageZone: (zone) => set({ coverageZone: zone }),
   setCoverageGeoJson: (gj) => set({ coverageGeoJson: gj }),
   setCoverageImage: (img) => set({ coverageImage: img }),
   setTerrainImage: (img) => set({ terrainImage: img }),

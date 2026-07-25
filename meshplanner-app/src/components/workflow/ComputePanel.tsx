@@ -14,6 +14,19 @@ import type { EngineRunParams } from "@/engine/core"
 import { Affine } from "@/lib/math/affine"
 import { useStore } from "@/store"
 
+/* ── Point-in-polygon test (ray casting) ── */
+function pointInPolygon(lon: number, lat: number, polygon: [number, number][]): boolean {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i]![0], yi = polygon[i]![1]
+    const xj = polygon[j]![0], yj = polygon[j]![1]
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
 function isMobileOrLowMemory(): boolean {
   if (typeof navigator === "undefined") return false
   const ua = navigator.userAgent
@@ -40,6 +53,7 @@ const primaryBtn = (disabled: boolean): React.CSSProperties => ({
 export function ComputePanel() {
   const {
     bbox,
+    coverageZone,
     sites,
     selectedSiteNames,
     params,
@@ -281,13 +295,29 @@ export function ComputePanel() {
       // ── Step 4: Threshold mask + GeoJSON overlay ──
       setProgress({ current: 3, total: 4, label: "Building map overlay…" })
       const mask = combineAtThreshold([combined], threshold, "any")
-      const maskLen = combined.width * combined.height
+      const { width: cw, height: ch, affine } = combined
+      const maskLen = cw * ch
       let coveredCells = 0
-      for (let i = 0; i < maskLen; i++) {
-        const val = mask[i]
-        if (val && val >= 0.5) coveredCells++
+      let totalTargetCells = 0
+      if (coverageZone && coverageZone.length >= 3) {
+        for (let r = 0; r < ch; r++) {
+          const lat = affine.f + r * affine.e
+          for (let c = 0; c < cw; c++) {
+            const lon = affine.c + c * affine.a
+            if (!pointInPolygon(lon, lat, coverageZone)) continue
+            totalTargetCells++
+            const val = mask[r * cw + c]
+            if (val && val >= 0.5) coveredCells++
+          }
+        }
+      } else {
+        for (let i = 0; i < maskLen; i++) {
+          const val = mask[i]
+          if (val && val >= 0.5) coveredCells++
+        }
+        totalTargetCells = maskLen
       }
-      const coveredFraction = maskLen > 0 ? coveredCells / maskLen : 0
+      const coveredFraction = totalTargetCells > 0 ? coveredCells / totalTargetCells : 0
 
       const coverageGeoJson = rasterToCoverageGeoJson(
         mask, combined.width, combined.height, combined.affine, 4,
@@ -320,7 +350,7 @@ export function ComputePanel() {
       setOptimizationResult(greedy)
       setCoverageResults({
         coveredFraction,
-        totalCells: maskLen,
+        totalCells: totalTargetCells,
         coveredCells,
         nSites: greedy.selectedSites.length,
         computeTimeS,

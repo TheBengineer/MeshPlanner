@@ -91,6 +91,8 @@ export function MeshMap({
   })
   const bbox = useStore((s) => s.bbox)
   const setBbox = useStore((s) => s.setBbox)
+  const coverageZone = useStore((s) => s.coverageZone)
+  const setCoverageZone = useStore((s) => s.setCoverageZone)
   const maxRangeKm = useStore((s) => s.coverageParams.maxRangeKm)
 
   /* ── Auto-compute bbox from selected sites + max range ── */
@@ -112,6 +114,20 @@ export function MeshMap({
   useEffect(() => {
     if (initialised && autoBbox) setBbox(autoBbox)
   }, [autoBbox, setBbox, initialised])
+
+  /* ── Auto-init coverage zone from bbox on first creation ── */
+  const czInitialised = useRef(false)
+  useEffect(() => {
+    if (!czInitialised.current && bbox && !coverageZone) {
+      czInitialised.current = true
+      setCoverageZone([
+        [bbox.west, bbox.south],
+        [bbox.east, bbox.south],
+        [bbox.east, bbox.north],
+        [bbox.west, bbox.north],
+      ])
+    }
+  }, [bbox, coverageZone, setCoverageZone])
 
   /* ── Center on site when triggerCenterOnSite is called ── */
   const centerOnSite = useStore((s) => s.centerOnSite)
@@ -332,6 +348,75 @@ export function MeshMap({
             />
           </Source>
         )}
+
+        {/* Coverage zone polygon — editable, defines desired coverage area */}
+        {coverageZone && coverageZone.length >= 3 && (
+          <Source
+            id="coverage-zone"
+            type="geojson"
+            data={{
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'Polygon',
+                coordinates: [[...coverageZone, coverageZone[0]]],
+              },
+            }}
+          >
+            <Layer
+              id="coverage-zone-fill"
+              type="fill"
+              paint={{
+                'fill-color': '#3388ff',
+                'fill-opacity': 0.08,
+              }}
+            />
+            <Layer
+              id="coverage-zone-outline"
+              type="line"
+              paint={{
+                'line-color': '#3388ff',
+                'line-width': 2,
+                'line-dasharray': [4, 3],
+              }}
+            />
+          </Source>
+        )}
+
+        {/* Coverage zone vertex handles — draggable */}
+        {coverageZone && coverageZone.length >= 3 && coverageZone.map((coord, i) => (
+          <Marker
+            key={`cz-vertex-${i}`}
+            latitude={coord[1]}
+            longitude={coord[0]}
+            draggable
+            onDragStart={handleDragStart}
+            onDrag={(e: MarkerDragEvent) => {
+              const next = [...coverageZone]
+              next[i] = [e.lngLat.lng, e.lngLat.lat]
+              setCoverageZone(next)
+            }}
+            onDragEnd={(e: MarkerDragEvent) => {
+              const next = [...coverageZone]
+              next[i] = [e.lngLat.lng, e.lngLat.lat]
+              setCoverageZone(next)
+              setDragging(false)
+            }}
+            style={{ zIndex: 5, cursor: 'grab' }}
+          >
+            <div
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                background: '#3388ff',
+                border: '2px solid white',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                cursor: 'inherit',
+              }}
+            />
+          </Marker>
+        ))}
       </Map>
     </div>
   )
