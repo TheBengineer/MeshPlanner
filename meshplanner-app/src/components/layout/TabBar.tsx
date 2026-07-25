@@ -43,6 +43,7 @@ const containerStyle: React.CSSProperties = {
   borderRadius: 4,
   overflow: 'hidden',
   border: '1px solid var(--border)',
+  minHeight: 36,
 }
 
 export function TabBar({ activeTab, onTabChange }: TabBarProps): ReactNode {
