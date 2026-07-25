@@ -94,6 +94,9 @@ export function MeshMap({
   const coverageZone = useStore((s) => s.coverageZone)
   const setCoverageZone = useStore((s) => s.setCoverageZone)
   const maxRangeKm = useStore((s) => s.coverageParams.maxRangeKm)
+  const hilltopCandidates = useStore((s) => s.hilltopCandidates)
+  const meshPlanResult = useStore((s) => s.meshPlanResult)
+  const meshPlanPhase = useStore((s) => s.meshPlanPhase)
 
   /* ── Auto-compute bbox from selected sites + max range ── */
   const selectedSites = useMemo(
@@ -104,6 +107,23 @@ export function MeshMap({
     () => rangeBbox(selectedSites.length > 0 ? selectedSites : sites, maxRangeKm ?? 30),
     [selectedSites, sites, maxRangeKm],
   )
+  const mstGeoJson = useMemo(() => {
+    if (!meshPlanResult?.mstEdges?.length || !meshPlanResult.selectedCandidates) return null
+    const features = meshPlanResult.mstEdges.map((edge) => {
+      const src = meshPlanResult.selectedCandidates[edge.sourceIdx]
+      const tgt = meshPlanResult.selectedCandidates[edge.targetIdx]
+      if (!src || !tgt) return null
+      return {
+        type: 'Feature' as const,
+        properties: { marginDb: edge.marginDb ?? -1 },
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: [[src.lon, src.lat], [tgt.lon, tgt.lat]],
+        },
+      }
+    }).filter((f): f is NonNullable<typeof f> => f !== null)
+    return { type: 'FeatureCollection' as const, features }
+  }, [meshPlanResult])
   const [initialised, setInitialised] = useState(false)
   useEffect(() => {
     if (!initialised && autoBbox) {
@@ -417,6 +437,96 @@ export function MeshMap({
             />
           </Marker>
         ))}
+
+        {/* ── Hilltop candidates (scout phase) ── */}
+        {meshPlanPhase === 'scout' && hilltopCandidates.length > 0 && hilltopCandidates.map((c, i) => (
+          <Marker
+            key={`hilltop-${i}`}
+            latitude={c.lat}
+            longitude={c.lon}
+          >
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: '#999',
+                border: '1px solid #ccc',
+              }}
+            />
+          </Marker>
+        ))}
+
+        {/* ── Selected mesh plan site markers ── */}
+        {meshPlanResult?.selectedCandidates && meshPlanResult.selectedCandidates.map((c, i) => (
+          <Marker
+            key={`mesh-selected-${i}`}
+            latitude={c.lat}
+            longitude={c.lon}
+          >
+            <div
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: '50%',
+                background: '#e74c3c',
+                border: '3px solid white',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+              }}
+            />
+          </Marker>
+        ))}
+
+        {/* ── MST edges ── */}
+        {mstGeoJson && (
+          <Source id="mesh-edges" type="geojson" data={mstGeoJson}>
+            <Layer
+              id="mesh-edges-line"
+              type="line"
+              paint={{
+                'line-color': [
+                  'case',
+                  ['>=', ['get', 'marginDb'], 10], '#67ea94',
+                  ['>=', ['get', 'marginDb'], 3], '#f5c518',
+                  '#ff5c5c',
+                ],
+                'line-width': 2.5,
+                'line-dasharray': [2, 1.5],
+              }}
+            />
+          </Source>
+        )}
+
+        {/* ── Gap analysis overlay ── */}
+        {meshPlanResult && bbox && (
+          <Source
+            id="mesh-gap"
+            type="geojson"
+            data={{
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                  [bbox.west, bbox.south],
+                  [bbox.east, bbox.south],
+                  [bbox.east, bbox.north],
+                  [bbox.west, bbox.north],
+                  [bbox.west, bbox.south],
+                ]],
+              },
+            }}
+          >
+            <Layer
+              id="mesh-gap-fill"
+              type="fill"
+              paint={{
+                'fill-color': '#ff0000',
+                'fill-opacity': 0.15,
+              }}
+            />
+          </Source>
+        )}
       </Map>
     </div>
   )
