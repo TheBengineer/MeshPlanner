@@ -79,6 +79,7 @@ export interface UISlice {
   sidebarOpen: boolean
   computing: boolean
   placing: boolean
+  coordPlacing: boolean
   colormap: string
   showTerrain: boolean
   showBuildings: boolean
@@ -87,6 +88,7 @@ export interface UISlice {
   setSidebarOpen: (open: boolean) => void
   setComputing: (v: boolean) => void
   setPlacing: (v: boolean) => void
+  setCoordPlacing: (v: boolean) => void
   setColormap: (v: string) => void
   setShowTerrain: (v: boolean) => void
   setShowBuildings: (v: boolean) => void
@@ -275,6 +277,7 @@ export const useStore = create<AppStore>((set, get) => ({
   sidebarOpen: window.innerWidth >= 768,
   computing: false,
   placing: false,
+  coordPlacing: false,
   colormap: 'plasma',
   showTerrain: false,
   showBuildings: true,
@@ -284,6 +287,7 @@ export const useStore = create<AppStore>((set, get) => ({
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setComputing: (v) => set({ computing: v }),
   setPlacing: (v) => set({ placing: v }),
+  setCoordPlacing: (v) => set({ coordPlacing: v }),
   setColormap: (v) => set((s) => ({ colormap: v, settings: { ...s.settings, colormap: v } })),
   setShowTerrain: (v) => set((s) => ({ showTerrain: v, settings: { ...s.settings, showTerrain: v } })),
   setShowBuildings: (v) => set({ showBuildings: v }),

@@ -23,10 +23,11 @@ export default function App() {
     updateSitePosition,
     setMode, toggleSiteSelection, selectedSiteNames,
     coverageImage, updateCoverageParams,
-    placing, setPlacing, showTerrain, setShowTerrain, showBuildings, setShowBuildings, terrainImage, setTerrainImage,
+    placing, setPlacing, coordPlacing, setCoordPlacing, showTerrain, setShowTerrain, showBuildings, setShowBuildings, terrainImage, setTerrainImage,
   } = useStore()
 
   const placeCounter = useRef(0)
+  const coordPlaceCounter = useRef(0)
 
   /* ── URL state persistence ── */
 
@@ -117,6 +118,20 @@ export default function App() {
   const handleCancelPlacing = useCallback(() => {
     setPlacing(false)
   }, [setPlacing])
+
+  const handlePlaceCoordSite = useCallback((lat: number, lon: number) => {
+    coordPlaceCounter.current += 1
+    const name = `Coord Area ${coordPlaceCounter.current}`
+    addSite({ name, latitude: lat, longitude: lon, siteType: 'required-coverage' })
+  }, [addSite])
+
+  const handleToggleCoordPlacing = useCallback(() => {
+    setCoordPlacing(!coordPlacing)
+  }, [coordPlacing, setCoordPlacing])
+
+  const handleCancelCoordPlacing = useCallback(() => {
+    setCoordPlacing(false)
+  }, [setCoordPlacing])
 
   const handleFileUpload = (content: string, filename: string) => {
     try {
@@ -256,6 +271,31 @@ export default function App() {
             {placing ? 'Placing… (click map)  Esc to cancel' : '📍 Place Sites'}
           </button>
 
+          {/* Add Coordination Area button — toggles coordPlacing mode */}
+          <button
+            type="button"
+            data-testid="coord-place-btn"
+            onClick={handleToggleCoordPlacing}
+            aria-label={coordPlacing ? 'Cancel coord placing mode' : 'Add coordination area on map'}
+            aria-pressed={coordPlacing}
+            style={{
+              width: '100%',
+              marginTop: 6,
+              padding: '6px 10px',
+              fontSize: 12,
+              fontWeight: 600,
+              border: coordPlacing ? '1px solid var(--accent)' : '1px solid var(--border)',
+              borderRadius: 4,
+              cursor: 'pointer',
+              background: coordPlacing ? 'var(--accent)' : 'var(--bg)',
+              color: coordPlacing ? '#fff' : 'var(--text-h)',
+              transition: 'background 0.15s, border-color 0.15s',
+              boxShadow: coordPlacing ? '0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent)' : 'none',
+            }}
+          >
+            {coordPlacing ? 'Placing coordination area…' : '➕ Add Coordination Area'}
+          </button>
+
           <FileUpload onFile={handleFileUpload} label="Upload CSV/GeoJSON" />
           <CriticalInfraImport />
           <button type="button" onClick={() => useStore.getState().triggerCenterOnSite()} style={{ width: '100%', padding: '4px 8px', marginTop: 4, marginBottom: 4, fontSize: 12 }}>Center on site</button>
@@ -289,6 +329,9 @@ export default function App() {
             placing={placing}
             onPlaceSite={handlePlaceSite}
             onCancelPlacing={handleCancelPlacing}
+            coordPlacing={coordPlacing}
+            onPlaceCoordSite={handlePlaceCoordSite}
+            onCancelCoordPlacing={handleCancelCoordPlacing}
             onUpdateSitePosition={updateSitePosition}
           />
         </Suspense>

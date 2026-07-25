@@ -46,6 +46,12 @@ interface MeshMapProps {
   onPlaceSite?: (lat: number, lon: number) => void
   /** Called when Escape is pressed in placing mode */
   onCancelPlacing?: () => void
+  /** When true, map click creates a required-coverage site */
+  coordPlacing?: boolean
+  /** Called when user clicks map in coordPlacing mode */
+  onPlaceCoordSite?: (lat: number, lon: number) => void
+  /** Called when Escape is pressed in coordPlacing mode */
+  onCancelCoordPlacing?: () => void
   /** Called when a marker is dragged to a new position */
   onUpdateSitePosition?: (name: string, lat: number, lon: number) => void
   style?: React.CSSProperties
@@ -76,6 +82,9 @@ export function MeshMap({
   placing = false,
   onPlaceSite,
   onCancelPlacing,
+  coordPlacing = false,
+  onPlaceCoordSite,
+  onCancelCoordPlacing,
   onUpdateSitePosition,
   style,
 }: MeshMapProps) {
@@ -240,24 +249,25 @@ export function MeshMap({
     img.src = terrainImg.url
   }, [showTerrain, terrainImg])
 
-  /* ── Escape key cancels placing mode ── */
+  /* ── Escape key cancels placing or coordPlacing mode ── */
   useEffect(() => {
-    if (!placing) return
+    if (!placing && !coordPlacing) return
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onCancelPlacing?.()
+        onCancelCoordPlacing?.()
       }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [placing, onCancelPlacing])
+  }, [placing, coordPlacing, onCancelPlacing, onCancelCoordPlacing])
 
   /* ── Update cursor on the map container ── */
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    el.style.cursor = placing ? 'crosshair' : ''
-  }, [placing])
+    el.style.cursor = (placing || coordPlacing) ? 'crosshair' : ''
+  }, [placing, coordPlacing])
 
   /* ── Map event handlers ── */
   const handleMoveEnd = useCallback((e: ViewStateChangeEvent) => {
@@ -276,9 +286,13 @@ export function MeshMap({
         onPlaceSite?.(e.lngLat.lat, e.lngLat.lng)
         return
       }
+      if (coordPlacing) {
+        onPlaceCoordSite?.(e.lngLat.lat, e.lngLat.lng)
+        return
+      }
       onMapClick?.(e.lngLat.lat, e.lngLat.lng)
     },
-    [placing, onPlaceSite, onMapClick],
+    [placing, coordPlacing, onPlaceSite, onPlaceCoordSite, onMapClick],
   )
 
   /* ── Marker drag handlers ── */
@@ -311,7 +325,7 @@ export function MeshMap({
         width: '100%',
         height: '100%',
         position: 'relative',
-        cursor: placing ? 'crosshair' : undefined,
+        cursor: (placing || coordPlacing) ? 'crosshair' : undefined,
       }}
     >
       <Map
