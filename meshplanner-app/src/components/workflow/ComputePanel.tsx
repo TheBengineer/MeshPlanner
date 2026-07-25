@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect } from "react"
+import { useCallback, useRef, useState, useEffect, useMemo } from "react"
 import { combineCoverage, combineAtThreshold } from "@/lib/combine/union"
 import { fetchDemRaster } from "@/lib/dem/fetch"
 import { downloadCsv, downloadGeoJson, rasterToCoverageGeoJson } from "@/lib/export/geojson"
@@ -9,7 +9,8 @@ import { computeCoverageWithWorkers } from "@/workers/coverage-manager"
 import { WasmCoverageEngine } from "@/engine/WasmCoverageEngine"
 import { coverageImage } from "@/lib/render/coverage-image"
 import { terrainImage } from "@/lib/render/terrain-image"
-import type { CoverageRaster, OptimizationResult, MeshPlanResult, HilltopScored } from "@/lib/types"
+import { haversineDistance } from "@/lib/math/geodetic"
+import type { CoverageRaster, OptimizationResult, MeshPlanResult, HilltopScored, SiteType } from "@/lib/types"
 import type { EngineRunParams } from "@/engine/core"
 import { Affine } from "@/lib/math/affine"
 import { scoutTerrain } from "@/lib/planning/scout"
@@ -17,6 +18,8 @@ import { buildMeshCoverageMatrix } from "@/lib/planning/matrix-builder"
 import { computeConnectivityGraph } from "@/lib/planning/connectivity"
 import { selectMeshSites } from "@/lib/planning/selector"
 import { buildMst } from "@/lib/planning/mst"
+import { generateRequiredSitesFromZone } from "@/lib/planning/coverage-zone"
+import { buildCellWeights } from "@/lib/planning/building-weight"
 import { useStore } from "@/store"
 
 /* ── Point-in-polygon test (ray casting) ── */
@@ -73,6 +76,7 @@ export function ComputePanel() {
     improvement,
     error,
     colormap,
+    buildingFootprints,
     updateCoverageParams,
     setComputing,
     setProgress,
@@ -476,13 +480,12 @@ export function ComputePanel() {
     setOptimizationPhase("computing")
 
     const { targetCoverage, maxRangeKm, numRadials, highRes } = coverageParams
-    const ippd = highRes ? 3600 : 1200
     const demZoom = highRes ? 13 : 12
 
     const planStartTime = performance.now()
 
     try {
-      // ── SCOUT phase: fetch DEM + detect hilltops ──
+      // ── PHASE 1: SCOUT — fetch DEM + detect hilltops ──
       setProgress({ current: 0, total: 100, label: "Scanning terrain…" })
       const demBbox = {
         west: Math.floor(bbox.west),
@@ -494,7 +497,7 @@ export function ComputePanel() {
       try {
         dem = await fetchDemRaster(demBbox, (pct) => {
           setDemPct(pct)
-          setProgress({ current: Math.round(pct * 0.2), total: 100, label: "Scanning terrain…" })
+          setProgress({ current: Math.round(pct * 0.15), total: 100, label: "Scanning terrain…" })
         }, demZoom)
       } catch (demErr) {
         const msg = demErr instanceof Error ? demErr.message : "Unknown DEM error"
@@ -503,41 +506,152 @@ export function ComputePanel() {
         )
       }
       const demAffine = dem.affine
+      const demData = dem.data
+      const demW = dem.width
+      const demH = dem.height
 
-      const candidates = await scoutTerrain(
-        dem.data, dem.width, dem.height, demAffine, bbox,
-      )
-      if (candidates.length === 0) {
+      const scoutCandidates = await scoutTerrain(demData, demW, demH, demAffine, bbox)
+      if (scoutCandidates.length === 0) {
         throw new Error("No hilltop candidates found in the current area. Try a different bounding box.")
       }
-      setHilltopCandidates(candidates)
-      setMeshPlanProgress({ current: 20, total: 100, label: `${candidates.length} candidates found` })
-      setProgress({ current: 20, total: 100, label: `${candidates.length} candidates found` })
-      setMeshPlanPhase("compute")
+      setHilltopCandidates(scoutCandidates)
+      setMeshPlanProgress({ current: 15, total: 100, label: `${scoutCandidates.length} candidates found` })
+      setProgress({ current: 15, total: 100, label: `${scoutCandidates.length} candidates found` })
 
-      // ── COMPUTE phase: build coverage matrix ──
+      // ── PHASE 2: MERGE — combine scout with existing / required-coverage sites ──
+      setMeshPlanPhase("compute")
+      setMeshPlanProgress({ current: 15, total: 100, label: "Merging existing sites…" })
+      setProgress({ current: 15, total: 100, label: "Merging existing sites…" })
+
+      // Helper: nearest-neighbour elevation lookup from DEM
+      const getElevation = (lat: number, lon: number): number => {
+        const col = (lon - demAffine.c) / demAffine.a
+        const row = (lat - demAffine.f) / demAffine.e
+        const ci = Math.round(col)
+        const ri = Math.round(row)
+        if (ci >= 0 && ci < demW && ri >= 0 && ri < demH) {
+          return demData[ri * demW + ci] ?? 0
+        }
+        return 0
+      }
+
+      // Helper: haversine distance in metres
+      const haversineM = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+        const R = 6371000
+        const dLat = (lat2 - lat1) * (Math.PI / 180)
+        const dLon = (lon2 - lon1) * (Math.PI / 180)
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(lat1 * (Math.PI / 180)) *
+            Math.cos(lat2 * (Math.PI / 180)) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2)
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+      }
+
+      // Build merged list seeded with scout candidates
+      const mergedCandidates: HilltopScored[] = [...scoutCandidates]
+      const requiredSet = new Set<number>()
+
+      // Match existing/required-coverage sites to scout candidates by proximity (≤100m)
+      const existingRequiredSites = sites.filter(
+        (s) => s.siteType === "existing" || s.siteType === "required-coverage",
+      )
+      for (const site of existingRequiredSites) {
+        let matchIdx = -1
+        for (let i = 0; i < scoutCandidates.length; i++) {
+          if (requiredSet.has(i)) continue
+          const d = haversineM(
+            site.latitude, site.longitude,
+            scoutCandidates[i]!.lat, scoutCandidates[i]!.lon,
+          )
+          if (d <= 100) {
+            matchIdx = i
+            break
+          }
+        }
+        if (matchIdx >= 0) {
+          requiredSet.add(matchIdx)
+        } else {
+          // Unmatched — add as synthetic candidate with high viewshed rank
+          mergedCandidates.push({
+            lat: site.latitude,
+            lon: site.longitude,
+            elevationM: getElevation(site.latitude, site.longitude),
+            prominenceM: 0,
+            viewshedRank: 1.0,
+          })
+          requiredSet.add(mergedCandidates.length - 1)
+        }
+      }
+
+      // ── PHASE 3: ZONE — generate required-coverage grid from coverage zone ──
+      if (coverageZone && coverageZone.length >= 3) {
+        const zoneSites = generateRequiredSitesFromZone(coverageZone)
+        for (const zs of zoneSites) {
+          mergedCandidates.push({
+            lat: zs.latitude,
+            lon: zs.longitude,
+            elevationM: getElevation(zs.latitude, zs.longitude),
+            prominenceM: 0,
+            viewshedRank: 1.0,
+          })
+          requiredSet.add(mergedCandidates.length - 1)
+        }
+      }
+
+      // ── Sort merged list descending by viewshed rank so required sites
+      //     (at rank 1.0) appear first. Build index map for requiredIndices. ──
+      const indexed = mergedCandidates.map((c, i) => ({ originalIdx: i, candidate: c }))
+      indexed.sort((a, b) => b.candidate.viewshedRank - a.candidate.viewshedRank)
+      const sortedCandidates = indexed.map((ic) => ic.candidate)
+      const originalToSorted = new Map<number, number>()
+      indexed.forEach((ic, sortedIdx) => originalToSorted.set(ic.originalIdx, sortedIdx))
+      const sortedRequiredIndices = [...requiredSet]
+        .map((origIdx) => originalToSorted.get(origIdx)!)
+        .sort((a, b) => a - b)
+
+      setMeshPlanProgress({
+        current: 20, total: 100,
+        label: `${sortedCandidates.length} total candidates (${sortedRequiredIndices.length} required)`,
+      })
+      setProgress({ current: 20, total: 100, label: "Preparing coverage matrix…" })
+
+      // ── PHASE 4: BUILDING WEIGHTS — cell weights from building footprints ──
+      let cellWeights: Float32Array | undefined
+      if (buildingFootprints && buildingFootprints.length > 0) {
+        try {
+          cellWeights = buildCellWeights(buildingFootprints, demW, demH, demAffine)
+        } catch (bwErr) {
+          console.warn("[mesh-plan] Building weight computation failed, continuing without weights:", bwErr)
+        }
+      }
+
+      // ── PHASE 5: MATRIX — build coverage matrix (all candidates, required boosted) ──
       setMeshPlanProgress({ current: 20, total: 100, label: "Computing coverage matrices…" })
       setProgress({ current: 20, total: 100, label: "Computing coverage matrices…" })
       const matrixResult = await buildMeshCoverageMatrix(
-        candidates,
-        dem.data, dem.width, dem.height, demAffine,
+        sortedCandidates,
+        demData, demW, demH, demAffine,
         params,
         { maxRangeKm, threshold: coverageParams.threshold, numRadials },
-        undefined,
+        sortedCandidates.length, // topN = all (preserve index alignment)
         (done, total) => {
           const pct = 20 + Math.round((done / total) * 40)
           setMeshPlanProgress({ current: pct, total: 100, label: `Computing coverage (${done}/${total})…` })
           setProgress({ current: pct, total: 100, label: `Computing coverage (${done}/${total})…` })
         },
+        sortedRequiredIndices,
       )
+
       setProgress({ current: 60, total: 100, label: "Computing connectivity…" })
       setMeshPlanProgress({ current: 60, total: 100, label: "Computing connectivity…" })
       setMeshPlanPhase("select")
 
-      // ── SELECT phase: connectivity + greedy selector ──
+      // ── PHASE 6: CONNECTIVITY — compute connectivity graph on sorted candidates ──
       const connectivityEdges = computeConnectivityGraph(
-        candidates,
-        dem.data, dem.width, dem.height, demAffine,
+        sortedCandidates,
+        demData, demW, demH, demAffine,
         maxRangeKm,
         {
           frequencyMhz: params.frequencyMhz,
@@ -545,27 +659,38 @@ export function ComputePanel() {
           rxHeightM: params.rxHeightM,
         },
       )
+
+      // ── PHASE 7: SELECT — connectivity-aware greedy with requiredIndices + cellWeights ──
       const selectorResult = selectMeshSites(
         matrixResult.matrix,
         matrixResult.siteNames,
         connectivityEdges,
         targetCoverage,
+        {
+          cellWeights,
+          requiredIndices: sortedRequiredIndices,
+          debug: false,
+        },
       )
+
       setProgress({ current: 90, total: 100, label: "Building mesh tree…" })
       setMeshPlanProgress({ current: 90, total: 100, label: "Building mesh tree…" })
       setMeshPlanPhase("mst")
 
-      // ── MST phase: build minimum spanning tree ──
-      const mstEdges = buildMst(selectorResult.selected, connectivityEdges, candidates.length)
+      // ── PHASE 8: MST — minimum spanning tree on selected indices ──
+      const mstEdges = buildMst(selectorResult.selected, connectivityEdges, sortedCandidates.length)
       setMstEdges(mstEdges)
 
+      // ── PHASE 9: RESULTS — store MeshPlanResult ──
       const planTimeS = (performance.now() - planStartTime) / 1000
 
       const result: MeshPlanResult = {
-        selectedCandidates: selectorResult.selected.map((i) => candidates[i]).filter((c): c is HilltopScored => c !== undefined),
+        selectedCandidates: selectorResult.selected
+          .map((i) => sortedCandidates[i])
+          .filter((c): c is HilltopScored => c !== undefined),
         mstEdges,
         coveredFraction: selectorResult.coveredFraction,
-        totalCandidates: candidates.length,
+        totalCandidates: sortedCandidates.length,
         solveTimeS: planTimeS,
         gapFraction: 1 - selectorResult.coveredFraction,
         connected: selectorResult.connected,
@@ -593,7 +718,7 @@ export function ComputePanel() {
       meshPlanInFlight.current = false
     }
   }, [
-    bbox, params, coverageParams,
+    bbox, sites, coverageZone, buildingFootprints, params, coverageParams,
     setComputing, setProgress, setError,
     setHilltopCandidates, setMeshPlanResult, setMstEdges,
     setMeshPlanPhase, setMeshPlanProgress, setOptimizationPhase,
@@ -639,6 +764,51 @@ export function ComputePanel() {
       default: return "Planning…"
     }
   })()
+
+  /* Categorise selected candidates by matching to store sites via proximity */
+  const siteTypeCounts = useMemo<{ existing: number; 'required-coverage': number; 'relay-candidate': number } | null>(() => {
+    if (!meshPlanResult) return null
+    const thresholdKm = 0.2 // 200 m — hilltops within this distance are matched to a store site
+    const counts = { existing: 0, 'required-coverage': 0, 'relay-candidate': 0 }
+    for (const candidate of meshPlanResult.selectedCandidates) {
+      let bestDist = thresholdKm + 1
+      let bestType: SiteType | undefined
+      for (const site of sites) {
+        const dist = haversineDistance(candidate.lat, candidate.lon, site.latitude, site.longitude)
+        if (dist < bestDist) {
+          bestDist = dist
+          bestType = site.siteType
+        }
+      }
+      if (bestDist <= thresholdKm && bestType) {
+        counts[bestType]++
+      } else {
+        counts['relay-candidate']++
+      }
+    }
+    return counts
+  }, [meshPlanResult, sites])
+
+  /* Building-level coverage estimate — fraction of building centroids inside the coverage zone */
+  const buildingCoveragePct = useMemo<number | null>(() => {
+    if (!buildingFootprints || !coverageZone || coverageZone.length < 3) return null
+    let total = 0
+    let covered = 0
+    for (const footprint of buildingFootprints) {
+      if (footprint.length === 0) continue
+      total++
+      let sumLat = 0
+      let sumLon = 0
+      for (const [lon, lat] of footprint) {
+        sumLat += lat
+        sumLon += lon
+      }
+      if (pointInPolygon(sumLon / footprint.length, sumLat / footprint.length, coverageZone)) {
+        covered++
+      }
+    }
+    return total > 0 ? (covered / total) * 100 : null
+  }, [buildingFootprints, coverageZone])
 
   return (
     <div style={{ borderTop: "1px solid var(--border)", padding: "8px" }}>
@@ -1042,11 +1212,41 @@ export function ComputePanel() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 8px" }}>
             <span style={{ color: "var(--text-secondary)" }}>Selected sites:</span>
-            <span style={{ fontWeight: 600 }}>{meshPlanResult.selectedCandidates.length}</span>
-            <span style={{ color: "var(--text-secondary)" }}>Covered fraction:</span>
+            <span>
+              <span style={{ fontWeight: 600 }}>{meshPlanResult.selectedCandidates.length}</span>
+              {siteTypeCounts && (
+                <span style={{ display: "inline-flex", gap: 8, marginLeft: 6, flexWrap: "wrap" }}>
+                  {siteTypeCounts.existing > 0 && (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#27ae60", display: "inline-block", flexShrink: 0 }} />
+                      <span>{siteTypeCounts.existing} exist.</span>
+                    </span>
+                  )}
+                  {siteTypeCounts['required-coverage'] > 0 && (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#f39c12", display: "inline-block", flexShrink: 0 }} />
+                      <span>{siteTypeCounts['required-coverage']} req.</span>
+                    </span>
+                  )}
+                  {siteTypeCounts['relay-candidate'] > 0 && (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#3498db", display: "inline-block", flexShrink: 0 }} />
+                      <span>{siteTypeCounts['relay-candidate']} relay</span>
+                    </span>
+                  )}
+                </span>
+              )}
+            </span>
+            <span style={{ color: "var(--text-secondary)" }}>Coverage:</span>
             <span style={{ fontWeight: 600 }}>
               {(meshPlanResult.coveredFraction * 100).toFixed(1)}%
             </span>
+            {buildingCoveragePct !== null && (
+              <>
+                <span style={{ color: "var(--text-secondary)" }}>Buildings:</span>
+                <span style={{ fontWeight: 600 }}>{buildingCoveragePct.toFixed(1)}%</span>
+              </>
+            )}
             <span style={{ color: "var(--text-secondary)" }}>MST edges:</span>
             <span style={{ fontWeight: 600 }}>{meshPlanResult.mstEdges.length}</span>
             <span style={{ color: "var(--text-secondary)" }}>Connectivity:</span>

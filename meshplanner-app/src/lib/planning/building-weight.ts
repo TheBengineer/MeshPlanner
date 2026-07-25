@@ -23,7 +23,9 @@ function pointInPolygon(lon: number, lat: number, polygon: [number, number][]): 
   let inside = false
   const n = polygon.length
   for (let i = 0, j = n - 1; i < n; j = i++) {
+    // biome-ignore lint/style/noNonNullAssertion: i < polygon.length guaranteed by loop bound
     const pi = polygon[i]!
+    // biome-ignore lint/style/noNonNullAssertion: j < polygon.length guaranteed by loop bound
     const pj = polygon[j]!
     const [xi, yi] = pi
     const [xj, yj] = pj
@@ -83,6 +85,7 @@ export function buildCellWeights(
     const cellLat = affine.f + (row + 0.5) * cellSizePx * affine.e
 
     for (let col = 0; col < nCols; col++) {
+      // biome-ignore lint/style/noNonNullAssertion: col < nCols guaranteed by loop bound
       const cellLon = colLons[col]!
       let buildingCount = 0
 

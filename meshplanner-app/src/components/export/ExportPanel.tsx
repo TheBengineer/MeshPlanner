@@ -1,6 +1,6 @@
 import { useCallback } from "react"
 import { useStore } from "@/store"
-import type { CandidateSite, LoraParams } from "@/lib/types"
+import type { CandidateSite, HilltopScored, LoraParams, MeshPlanResult, MstEdge } from "@/lib/types"
 import type { CoverageParams } from "@/store"
 import { downloadBlob } from "@/lib/export/geojson"
 
@@ -203,6 +203,123 @@ function buildSummaryReport(
   return lines.join("\n")
 }
 
+/* ── Mesh Plan GeoJSON helper: sites + MST edges + coverage zone ── */
+
+function meshPlanToGeoJson(
+  selectedCandidates: HilltopScored[],
+  mstEdges: MstEdge[],
+  coverageZone: [number, number][] | null,
+): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = []
+
+  for (let i = 0; i < selectedCandidates.length; i++) {
+    const c = selectedCandidates[i]!
+    features.push({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [c.lon, c.lat] },
+      properties: {
+        name: `Relay ${i + 1}`,
+        siteType: "relay-candidate",
+        elevationM: c.elevationM,
+      },
+    })
+  }
+
+  for (const edge of mstEdges) {
+    const src = selectedCandidates[edge.sourceIdx]
+    const tgt = selectedCandidates[edge.targetIdx]
+    if (!src || !tgt) continue
+    features.push({
+      type: "Feature",
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [src.lon, src.lat],
+          [tgt.lon, tgt.lat],
+        ],
+      },
+      properties: {
+        distanceKm: edge.distanceKm,
+        marginDb: edge.marginDb ?? null,
+      },
+    })
+  }
+
+  if (coverageZone && coverageZone.length >= 3) {
+    features.push({
+      type: "Feature",
+      geometry: {
+        type: "Polygon",
+        coordinates: [[...coverageZone, coverageZone[0]!]],
+      },
+      properties: { name: "Coverage Zone" },
+    })
+  }
+
+  return { type: "FeatureCollection", features }
+}
+
+/* ── Mesh Plan CSV helper: site name, lat, lon, elevation, type ── */
+
+function meshPlanToCsv(selectedCandidates: HilltopScored[]): string {
+  const lines = ['"name","latitude","longitude","elevation_m","site_type"']
+  for (let i = 0; i < selectedCandidates.length; i++) {
+    const c = selectedCandidates[i]!
+    lines.push(
+      `"Relay ${i + 1}",${c.lat},${c.lon},${c.elevationM},"relay-candidate"`,
+    )
+  }
+  return lines.join("\n")
+}
+
+/* ── Mesh Plan printable summary ── */
+
+function buildMeshPlanSummary(result: MeshPlanResult): string {
+  const lines: string[] = [
+    "═══════════════════════════════════════════════════════",
+    "  MeshPlanner — Mesh Deployment Plan",
+    "═══════════════════════════════════════════════════════",
+    "",
+    "── Overview ──",
+    `  Selected Sites:         ${result.selectedCandidates.length}`,
+    `  MST Edges:              ${result.mstEdges.length}`,
+    `  Covered Fraction:       ${(result.coveredFraction * 100).toFixed(1)}%`,
+    `  Gap Fraction:           ${(result.gapFraction * 100).toFixed(1)}%`,
+    `  Fully Connected:        ${result.connected ? "Yes" : "No"}`,
+    `  Solve Time:             ${result.solveTimeS.toFixed(2)} s`,
+    "",
+    "── Selected Sites ──",
+  ]
+
+  for (let i = 0; i < result.selectedCandidates.length; i++) {
+    const c = result.selectedCandidates[i]!
+    const pct = (c.viewshedRank * 100).toFixed(0)
+    lines.push(
+      `  ${i + 1}. Relay ${i + 1}: ${c.lat}, ${c.lon} (${c.elevationM} m, prominence ${c.prominenceM}m, viewshed ${pct}%)`,
+    )
+  }
+
+  lines.push("", "── MST Links ──")
+  for (const edge of result.mstEdges) {
+    const src = result.selectedCandidates[edge.sourceIdx]
+    const tgt = result.selectedCandidates[edge.targetIdx]
+    const srcName = src ? `Relay ${edge.sourceIdx + 1}` : `#${edge.sourceIdx}`
+    const tgtName = tgt ? `Relay ${edge.targetIdx + 1}` : `#${edge.targetIdx}`
+    const margin =
+      edge.marginDb != null ? `, margin ${edge.marginDb.toFixed(1)} dB` : ""
+    lines.push(
+      `  • ${srcName} → ${tgtName}: ${edge.distanceKm.toFixed(2)} km${margin}`,
+    )
+  }
+
+  lines.push("")
+  lines.push("═══════════════════════════════════════════════════════")
+  lines.push(`  Generated: ${new Date().toISOString()}`)
+  lines.push("═══════════════════════════════════════════════════════")
+
+  return lines.join("\n")
+}
+
 /* ── Shared button style ── */
 
 const btnBase: React.CSSProperties = {
@@ -234,6 +351,9 @@ export function ExportPanel() {
     optimizationResult,
     coverageResults,
     coverageGeoJson,
+    coverageZone,
+    meshPlanResult,
+    meshPlanPhase,
   } = useStore()
 
   // Sites to export: prefer optimization result, fall back to UI selection
@@ -290,6 +410,34 @@ export function ExportPanel() {
     downloadBlob(report, "meshplanner_summary.txt", "text/plain")
   }, [params, coverageParams, optimizationResult, coverageResults, sites])
 
+  /* ── Mesh plan exports (only when meshPlanPhase === 'complete') ── */
+
+  const handleExportMeshGeoJson = useCallback(() => {
+    if (!meshPlanResult) return
+    const fc = meshPlanToGeoJson(
+      meshPlanResult.selectedCandidates,
+      meshPlanResult.mstEdges,
+      coverageZone,
+    )
+    downloadBlob(
+      JSON.stringify(fc, null, 2),
+      "meshplan_export.geojson",
+      "application/geo+json",
+    )
+  }, [meshPlanResult, coverageZone])
+
+  const handleExportMeshCsv = useCallback(() => {
+    if (!meshPlanResult) return
+    const csv = meshPlanToCsv(meshPlanResult.selectedCandidates)
+    downloadBlob(csv, "meshplan_sites.csv", "text/csv")
+  }, [meshPlanResult])
+
+  const handleExportMeshSummary = useCallback(() => {
+    if (!meshPlanResult) return
+    const report = buildMeshPlanSummary(meshPlanResult)
+    downloadBlob(report, "meshplan_summary.txt", "text/plain")
+  }, [meshPlanResult])
+
   return (
     <div data-testid="export-panel" style={{ borderTop: "1px solid #ddd", padding: "8px" }}>
       <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13, color: "#333" }}>
@@ -341,6 +489,43 @@ export function ExportPanel() {
           Summary Report
         </button>
       </div>
+
+      {meshPlanPhase === "complete" && meshPlanResult && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13, color: "#333" }}>
+            Export Mesh Plan
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <button
+              type="button"
+              data-testid="export-mesh-geojson-btn"
+              onClick={handleExportMeshGeoJson}
+              aria-label="Download mesh plan as GeoJSON"
+              style={{ ...btnBase, background: "#fff" }}
+            >
+              Download Mesh GeoJSON
+            </button>
+            <button
+              type="button"
+              data-testid="export-mesh-csv-btn"
+              onClick={handleExportMeshCsv}
+              aria-label="Download mesh plan as CSV"
+              style={{ ...btnBase, background: "#fff" }}
+            >
+              Download Mesh CSV
+            </button>
+            <button
+              type="button"
+              data-testid="export-mesh-summary-btn"
+              onClick={handleExportMeshSummary}
+              aria-label="Download mesh plan summary"
+              style={{ ...btnBase, background: "#fff" }}
+            >
+              Mesh Plan Summary
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
