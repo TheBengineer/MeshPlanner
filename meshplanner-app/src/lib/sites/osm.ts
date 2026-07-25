@@ -314,6 +314,7 @@ export function elementToSite(element: OverpassElement): CandidateSite | null {
     latitude: lat,
     longitude: lon,
     notes: `OSM element ${element.id} type=${elemType}`,
+    siteType: "existing",
   }
 }
 
