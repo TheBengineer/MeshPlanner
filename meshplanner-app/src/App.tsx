@@ -63,6 +63,9 @@ export default function App() {
       if (state.c) s.setColormap(state.c)
       if (state.m) s.setMode(state.m)
       if (state.vp) useStore.setState({ viewport: { latitude: state.vp.lat, longitude: state.vp.lon, zoom: state.vp.zoom } })
+      if (state.cz) useStore.setState({ coverageZone: state.cz })
+      if (state.hc) useStore.setState({ hilltopCandidates: state.hc })
+      if (state.mpr) useStore.setState({ meshPlanResult: state.mpr })
     }
   }, [])
 
@@ -78,6 +81,9 @@ export default function App() {
           mode: state.mode,
           bbox: state.bbox,
           settings: state.settings,
+          coverageZone: state.coverageZone,
+          hilltopCandidates: state.hilltopCandidates,
+          meshPlanResult: state.meshPlanResult,
         })
         persisted.vp = {
           lat: state.viewport.latitude,

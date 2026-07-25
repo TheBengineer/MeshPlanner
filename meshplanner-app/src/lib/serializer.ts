@@ -6,7 +6,7 @@
  */
 
 import type { AppStore, AppMode } from '../store'
-import type { Bbox, CandidateSite } from './types'
+import type { Bbox, CandidateSite, HilltopScored, MeshPlanResult } from './types'
 
 export interface PersistedState {
   v: 1
@@ -18,6 +18,9 @@ export interface PersistedState {
   kv: Record<string, any>
   c: string  // colormap
   vp: { lat: number; lon: number; zoom: number } | null
+  cz?: [number, number][] | null  // coverage zone polygon
+  hc?: HilltopScored[] | null     // hilltop candidates
+  mpr?: MeshPlanResult | null     // mesh plan result
 }
 
 export function encodeState(state: PersistedState): string {
@@ -52,6 +55,9 @@ export function extractState(store: {
   mode: AppMode
   bbox: Bbox | null
   settings: Record<string, any>
+  coverageZone?: [number, number][] | null
+  hilltopCandidates?: HilltopScored[] | null
+  meshPlanResult?: MeshPlanResult | null
 }): PersistedState {
   return {
     v: 1,
@@ -62,5 +68,8 @@ export function extractState(store: {
     kv: store.settings,
     c: (store as any).colormap ?? 'plasma',
     vp: null,
+    cz: store.coverageZone ?? null,
+    hc: store.hilltopCandidates ?? null,
+    mpr: store.meshPlanResult ?? null,
   }
 }
