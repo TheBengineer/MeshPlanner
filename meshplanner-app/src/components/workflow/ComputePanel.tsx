@@ -10,7 +10,7 @@ import { WasmCoverageEngine } from "@/engine/WasmCoverageEngine"
 import { coverageImage } from "@/lib/render/coverage-image"
 import { terrainImage } from "@/lib/render/terrain-image"
 import { haversineDistance } from "@/lib/math/geodetic"
-import type { CoverageRaster, OptimizationResult, MeshPlanResult, HilltopScored, SiteType } from "@/lib/types"
+import type { CoverageRaster, OptimizationResult, MeshPlanResult, HilltopScored, SiteType, SiteCoverageIndex } from "@/lib/types"
 import type { EngineRunParams } from "@/engine/core"
 import { Affine } from "@/lib/math/affine"
 import { scoutTerrain } from "@/lib/planning/scout"
@@ -95,12 +95,13 @@ export function ComputePanel() {
     mstEdges,
     meshPlanPhase,
     meshPlanProgress,
-    setHilltopCandidates,
-    setMeshPlanResult,
-    setMstEdges,
-    setMeshPlanPhase,
-    setMeshPlanProgress,
-  } = useStore()
+	    setHilltopCandidates,
+	    setMeshPlanResult,
+	    setMstEdges,
+	    setMeshPlanPhase,
+	    setMeshPlanProgress,
+	    setSiteCoverageIndex,
+	  } = useStore()
 
   const resultsPanelRef = useRef<HTMLDivElement>(null)
   const computeInFlight = useRef(false)
@@ -307,6 +308,12 @@ export function ComputePanel() {
           )
         }
       }
+
+      // Persist per-site coverage rasters for mesh planning
+      setSiteCoverageIndex({
+        rasters: rasterMap,
+        siteNames: [...rasterMap.keys()],
+      })
 
       // ── Step 3: Combine coverage rasters ──
       setProgress({ current: 2, total: 4, label: "Combining coverage rasters…" })
