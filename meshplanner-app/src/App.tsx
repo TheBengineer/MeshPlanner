@@ -24,7 +24,7 @@ export default function App() {
   const {
     sidebarOpen, setSidebarOpen,
     mode,
-    sites, addSite, removeSite, clearSites,
+    sites, addSite, removeSite, clearSites, renameSite,
     updateSitePosition,
     setMode, toggleSiteSelection, selectedSiteNames,
     coverageImage, updateCoverageParams,
@@ -357,6 +357,7 @@ export default function App() {
             onToggleSite={toggleSiteSelection}
             onDeleteSite={removeSite}
             onClearAll={clearSites}
+            onRenameSite={renameSite}
           />
         </div>
         </>

@@ -17,6 +17,7 @@ export interface SitesSlice {
   toggleSiteSelection: (name: string) => void
   clearSites: () => void
   loadSites: (sites: CandidateSite[]) => void
+  renameSite: (oldName: string, newName: string) => void
 }
 
 /* ── Coverage compute params ── */
@@ -196,6 +197,16 @@ export const useStore = create<AppStore>((set, get) => ({
 
   loadSites: (sites) =>
     set({ sites, selectedSiteNames: sites.map((x) => x.name) }),
+
+  renameSite: (oldName, newName) =>
+    set((s) => ({
+      sites: s.sites.map((site) =>
+        site.name === oldName ? { ...site, name: newName } : site,
+      ),
+      selectedSiteNames: s.selectedSiteNames.includes(oldName)
+        ? s.selectedSiteNames.map((x) => (x === oldName ? newName : x))
+        : s.selectedSiteNames,
+    })),
 
   /* Params */
   params: DEFAULT_LORA_PARAMS,

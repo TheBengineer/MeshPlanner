@@ -356,17 +356,34 @@ export function MeshMap({
               onDragEnd={(e) => handleDragEnd(site.name, e)}
               style={{ zIndex: placing ? 10 : undefined, cursor: placing ? 'grab' : 'pointer' }}
             >
-              <div
-                style={{
-                  width: size,
-                  height: size,
-                  borderRadius: '50%',
-                  background: isSelected ? '#e74c3c' : baseColor,
-                  border: '3px solid white',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
-                  cursor: 'inherit',
-                }}
-              />
+              <div style={{ position: 'relative', cursor: 'inherit' }}>
+                <div
+                  style={{
+                    width: size,
+                    height: size,
+                    borderRadius: '50%',
+                    background: isSelected ? '#e74c3c' : baseColor,
+                    border: '3px solid white',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+                    cursor: 'inherit',
+                  }}
+                />
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: '#fff',
+                    textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+                    whiteSpace: 'nowrap',
+                    position: 'absolute',
+                    top: '100%',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {site.name}
+                </div>
+              </div>
             </Marker>
           )
         })}
