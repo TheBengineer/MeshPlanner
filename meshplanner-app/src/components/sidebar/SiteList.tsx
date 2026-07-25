@@ -88,7 +88,7 @@ export function SiteList({ sites, selectedNames, onToggleSite, onDeleteSite, onC
             />
           ) : (
             <span
-              style={{ flex: 1, cursor: 'pointer' }}
+              style={{ flex: 1, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
               onClick={() => startEditing(site.name)}
               title="Click to rename"
             >
