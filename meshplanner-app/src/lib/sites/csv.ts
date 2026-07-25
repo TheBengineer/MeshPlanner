@@ -1,4 +1,6 @@
-import type { CandidateSite } from '../types'
+import type { CandidateSite, SiteType } from '../types'
+
+const SITE_TYPE_VALUES: readonly SiteType[] = ['existing', 'required-coverage', 'relay-candidate']
 
 export function parseSitesCsv(text: string): CandidateSite[] {
   const lines = text.trim().split('\n')
@@ -11,6 +13,7 @@ export function parseSitesCsv(text: string): CandidateSite[] {
   const lonIdx = header.findIndex(h => h === 'lon' || h === 'lng' || h === 'longitude' || h === 'long')
   const elevIdx = header.findIndex(h => h === 'elevation' || h === 'elevation_m' || h === 'elev')
   const notesIdx = header.findIndex(h => h === 'notes' || h === 'description')
+  const siteTypeIdx = header.findIndex(h => h === 'site_type' || h === 'sitetype')
   
   if (nameIdx < 0 || latIdx < 0 || lonIdx < 0) {
     throw new Error('CSV must have columns: name, lat, lon')
@@ -40,6 +43,10 @@ export function parseSitesCsv(text: string): CandidateSite[] {
 
     const elevRaw = elevIdx >= 0 ? cols[elevIdx] : undefined
     const notesRaw = notesIdx >= 0 ? cols[notesIdx] : undefined
+    const siteTypeRaw = siteTypeIdx >= 0 ? cols[siteTypeIdx]?.trim().toLowerCase() : undefined
+    const siteType: SiteType | undefined = SITE_TYPE_VALUES.includes(siteTypeRaw as SiteType)
+      ? (siteTypeRaw as SiteType)
+      : undefined
 
     sites.push({
       name: uniqueName,
@@ -47,6 +54,7 @@ export function parseSitesCsv(text: string): CandidateSite[] {
       longitude: lon,
       elevationM: elevRaw !== undefined ? parseFloat(elevRaw) || undefined : undefined,
       notes: notesRaw?.trim() || undefined,
+      siteType,
     })
   }
   
@@ -54,9 +62,9 @@ export function parseSitesCsv(text: string): CandidateSite[] {
 }
 
 export function exportSitesCsv(sites: CandidateSite[]): string {
-  const rows = [['name', 'latitude', 'longitude', 'elevation_m', 'notes']]
+  const rows = [['name', 'latitude', 'longitude', 'elevation_m', 'notes', 'site_type']]
   for (const s of sites) {
-    rows.push([s.name, String(s.latitude), String(s.longitude), s.elevationM !== undefined ? String(s.elevationM) : '', s.notes ?? ''])
+    rows.push([s.name, String(s.latitude), String(s.longitude), s.elevationM !== undefined ? String(s.elevationM) : '', s.notes ?? '', s.siteType ?? ''])
   }
   return rows.map(r => r.join(',')).join('\n')
 }

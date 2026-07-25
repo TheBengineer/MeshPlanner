@@ -1,4 +1,6 @@
-import type { CandidateSite } from '../types'
+import type { CandidateSite, SiteType } from '../types'
+
+const SITE_TYPE_VALUES: readonly SiteType[] = ['existing', 'required-coverage', 'relay-candidate']
 
 interface GeoJSONFeature {
   type: 'Feature'
@@ -33,12 +35,18 @@ export function parseSitesGeoJson(text: string): CandidateSite[] {
     const uniqueName = seenNames.has(name) ? `${name} (${counter})` : name
     seenNames.add(uniqueName)
     
+    const siteTypeRaw = props?.siteType !== undefined ? String(props.siteType).toLowerCase() : undefined
+    const siteType: SiteType | undefined = SITE_TYPE_VALUES.includes(siteTypeRaw as SiteType)
+      ? (siteTypeRaw as SiteType)
+      : undefined
+
     sites.push({
       name: uniqueName,
       latitude: lat,
       longitude: lon,
       elevationM: props?.elevation_m !== undefined ? Number(props.elevation_m) : undefined,
       notes: props?.notes !== undefined ? String(props.notes) : undefined,
+      siteType,
     })
   }
   
@@ -53,6 +61,7 @@ export function exportSitesGeoJson(sites: CandidateSite[]): string {
       name: s.name,
       elevation_m: s.elevationM ?? null,
       notes: s.notes ?? null,
+      siteType: s.siteType ?? null,
     },
   }))
   return JSON.stringify({ type: 'FeatureCollection', features }, null, 2)
