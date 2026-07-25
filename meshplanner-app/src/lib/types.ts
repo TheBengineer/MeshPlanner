@@ -85,3 +85,31 @@ export interface OptimizationResult {
   status: string
   source: string
 }
+
+export interface HilltopScored {
+  lat: number
+  lon: number
+  elevationM: number
+  prominenceM: number
+  viewshedRank: number  // 0-1, fraction of bbox sample points visible from peak
+}
+
+export interface MstEdge {
+  sourceIdx: number    // index into selectedSites
+  targetIdx: number
+  distanceKm: number
+  pathLossDb?: number
+  marginDb?: number
+}
+
+export interface MeshPlanResult {
+  selectedCandidates: HilltopScored[]
+  mstEdges: MstEdge[]
+  coveredFraction: number
+  totalCandidates: number
+  solveTimeS: number
+  gapFraction: number  // fraction of bbox NOT covered
+  connected: boolean    // whether the MST is fully connected
+}
+
+export type MeshPlanPhase = 'idle' | 'scout' | 'compute' | 'select' | 'mst' | 'complete' | 'error'

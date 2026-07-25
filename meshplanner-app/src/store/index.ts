@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Bbox, CandidateSite, LoraParams, LinkBudget, CoverageRaster, OptimizationResult } from "@/lib/types"
+import type { Bbox, CandidateSite, LoraParams, LinkBudget, CoverageRaster, OptimizationResult, HilltopScored, MstEdge, MeshPlanResult, MeshPlanPhase } from "@/lib/types"
 import type { CoverageImageResult } from "@/lib/render/coverage-image"
 import type { TerrainImageResult } from "@/lib/render/terrain-image"
 import { DEFAULT_LORA_PARAMS } from "@/lib/constants"
@@ -70,7 +70,7 @@ export interface MapSlice {
 
 /* ── UI slice ── */
 
-export type AppMode = "single" | "batch" | "optimize"
+export type AppMode = "single" | "batch" | "optimize" | "meshplan"
 
 export interface UISlice {
   mode: AppMode
@@ -124,9 +124,24 @@ export interface ResultsSlice {
   setError: (e: string | null) => void
 }
 
+/* ── Mesh planning slice ── */
+
+export interface MeshPlanningSlice {
+  hilltopCandidates: HilltopScored[]
+  meshPlanResult: MeshPlanResult | null
+  mstEdges: MstEdge[]
+  meshPlanPhase: MeshPlanPhase
+  meshPlanProgress: { current: number; total: number; label: string } | null
+  setHilltopCandidates: (candidates: HilltopScored[]) => void
+  setMeshPlanResult: (result: MeshPlanResult | null) => void
+  setMstEdges: (edges: MstEdge[]) => void
+  setMeshPlanPhase: (phase: MeshPlanPhase) => void
+  setMeshPlanProgress: (p: { current: number; total: number; label: string } | null) => void
+}
+
 /* ── Combined store ── */
 
-export type AppStore = SitesSlice & ParamsSlice & MapSlice & UISlice & ResultsSlice
+export type AppStore = SitesSlice & ParamsSlice & MapSlice & UISlice & ResultsSlice & MeshPlanningSlice
 
 export const useStore = create<AppStore>((set, get) => ({
   /* Sites */
@@ -278,6 +293,19 @@ export const useStore = create<AppStore>((set, get) => ({
   setGreedyResult: (r) => set({ greedyResult: r }),
   setImprovement: (i) => set({ improvement: i }),
   setError: (e) => set({ error: e }),
+
+  /* Mesh planning */
+  hilltopCandidates: [],
+  meshPlanResult: null,
+  mstEdges: [],
+  meshPlanPhase: 'idle',
+  meshPlanProgress: null,
+
+  setHilltopCandidates: (candidates) => set({ hilltopCandidates: candidates }),
+  setMeshPlanResult: (result) => set({ meshPlanResult: result }),
+  setMstEdges: (edges) => set({ mstEdges: edges }),
+  setMeshPlanPhase: (phase) => set({ meshPlanPhase: phase }),
+  setMeshPlanProgress: (p) => set({ meshPlanProgress: p }),
 }))
 
 /* ── Expose store on window for E2E test access ── */
