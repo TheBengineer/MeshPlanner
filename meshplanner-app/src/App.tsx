@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useRef, useEffect } from 'react'
+import { lazy, Suspense, useCallback, useRef, useEffect, useState } from 'react'
 import { SiteList } from '@/components/sidebar/SiteList'
 import { SiteForm } from '@/components/sidebar/SiteForm'
 import { LoraParamsForm } from '@/components/sidebar/LoraParamsForm'
@@ -9,6 +9,7 @@ import { CriticalInfraImport } from '@/components/common/CriticalInfraImport'
 import { TabBar } from '@/components/layout/TabBar'
 import { StepStepper } from '@/components/layout/StepStepper'
 import { ModeToggle } from '@/components/layout/ModeToggle'
+import { TutorialOverlay } from '@/components/tutorial/TutorialOverlay'
 import { parseSitesCsv } from '@/lib/sites/csv'
 import { parseSitesGeoJson } from '@/lib/sites/geojson'
 import { useStore } from '@/store'
@@ -31,6 +32,8 @@ export default function App() {
     activeTab, setActiveTab,
     guidedMode,
   } = useStore()
+
+  const [tutorialOpen, setTutorialOpen] = useState(false)
 
   const placeCounter = useRef(0)
   const coordPlaceCounter = useRef(0)
@@ -150,12 +153,43 @@ export default function App() {
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen])
 
+  const handleStepClick = useCallback((index: number) => {
+    const ids = ['step-area', 'step-mark-sites', 'step-import', 'step-configure']
+    const id = ids[index]
+    if (id) document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
   return (
     <>
+      {tutorialOpen && <TutorialOverlay onClose={() => setTutorialOpen(false)} />}
       {/* Top bar */}
       <div className="top-bar">
         <h2 data-testid="app-title">MeshPlanner</h2>
         <div className="top-bar__actions">
+          <button
+            type="button"
+            onClick={() => setTutorialOpen(true)}
+            aria-label="Open tutorial"
+            data-testid="tutorial-btn"
+            style={{
+              width: 28,
+              height: 28,
+              marginRight: 6,
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              background: 'var(--bg-secondary)',
+              color: 'var(--text)',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: 1,
+            }}
+          >
+            ?
+          </button>
           <ModeToggle />
           <select
             value={mode}
@@ -207,10 +241,18 @@ export default function App() {
         <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
         {activeTab === 'setup' && (
-        <div className="sidebar-section sidebar-section--padded">
-          <div className="section-label">Sites</div>
+        <>
+          {guidedMode && (
+            <p style={{ padding: '8px 12px 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+              Define your disaster zone, mark sites with LoRa nodes, import critical infrastructure, and configure radio parameters.
+            </p>
+          )}
+          {guidedMode && <StepStepper currentStep={0} onStepClick={handleStepClick} />}
+          <div className="sidebar-section sidebar-section--padded">
+          {guidedMode ? <h3 id="step-mark-sites" style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Mark Sites</h3> : <div className="section-label">Sites</div>}
           <SiteForm onAddSite={addSite} />
 
+          {guidedMode && <h3 id="step-area" style={{ margin: '12px 0 8px', fontSize: 13, fontWeight: 600 }}>Area</h3>}
           {/* Terrain overlay toggle */}
           <button
             type="button"
@@ -305,6 +347,7 @@ export default function App() {
             {coordPlacing ? 'Placing coordination area…' : '➕ Add Coordination Area'}
           </button>
 
+          {guidedMode && <h3 id="step-import" style={{ margin: '12px 0 8px', fontSize: 13, fontWeight: 600 }}>Import</h3>}
           <FileUpload onFile={handleFileUpload} label="Upload CSV/GeoJSON" />
           <CriticalInfraImport />
           <button type="button" onClick={() => useStore.getState().triggerCenterOnSite()} style={{ width: '100%', padding: '4px 8px', marginTop: 4, marginBottom: 4, fontSize: 12 }}>Center on site</button>
@@ -316,6 +359,13 @@ export default function App() {
             onClearAll={clearSites}
           />
         </div>
+        </>
+        )}
+
+        {guidedMode && activeTab === 'plan' && (
+          <p style={{ padding: '8px 12px 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+            Run the mesh planner to automatically find optimal hilltop relay locations and build a connected mesh network.
+          </p>
         )}
 
         <ErrorBoundary>
@@ -325,12 +375,24 @@ export default function App() {
         </ErrorBoundary>
 
         {activeTab === 'setup' && (
-        <LoraParamsForm onParamsChange={(params, kwargs) => {
-          useStore.setState({ params })
-          if (kwargs) updateCoverageParams(kwargs)
-        }} />
+        <>
+          {guidedMode && <h3 id="step-configure" style={{ margin: '8px 12px 0', fontSize: 13, fontWeight: 600 }}>Configure</h3>}
+          <LoraParamsForm onParamsChange={(params, kwargs) => {
+            useStore.setState({ params })
+            if (kwargs) updateCoverageParams(kwargs)
+          }} />
+        </>
         )}
-        {activeTab === 'results' && <ExportPanel />}
+        {activeTab === 'results' && (
+        <>
+          {guidedMode && (
+            <p style={{ padding: '8px 12px 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+              Review coverage metrics, compare optimization results, and export your deployment plan.
+            </p>
+          )}
+          <ExportPanel />
+        </>
+        )}
       </div>
 
       <div data-testid="map-area" className="map-area">
