@@ -681,7 +681,7 @@ export function ComputePanel() {
         // Steps 1-4: progress.current/total fills proportionally
         let pct: number
         if (progress.total <= 4 && progress.current === 0 && demPct > 0) {
-          pct = Math.round((demPct / 100) * 25)
+          pct = demPct  // DEM progress: 0-100% during tile loading
         } else {
           pct = progress.total > 0 ? Math.min(100, Math.round((progress.current / progress.total) * 100)) : 0
         }
