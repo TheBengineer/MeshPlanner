@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useRef, useEffect } from 'react'
 import { SiteList } from '@/components/sidebar/SiteList'
 import { SiteForm } from '@/components/sidebar/SiteForm'
 import { LoraParamsForm } from '@/components/sidebar/LoraParamsForm'
+import { ExportPanel } from '@/components/export/ExportPanel'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { CriticalInfraImport } from '@/components/common/CriticalInfraImport'
@@ -318,6 +319,7 @@ export default function App() {
           useStore.setState({ params })
           if (kwargs) updateCoverageParams(kwargs)
         }} />
+        <ExportPanel />
       </div>
 
       <div data-testid="map-area" className="map-area">
