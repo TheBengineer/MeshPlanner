@@ -116,3 +116,10 @@ export interface MeshPlanResult {
 }
 
 export type MeshPlanPhase = 'idle' | 'scout' | 'compute' | 'select' | 'mst' | 'complete' | 'error'
+
+export interface SiteCoverageIndex {
+  /** Per-site coverage rasters keyed by site name */
+  rasters: Map<string, CoverageRaster>
+  /** Site names in index order */
+  siteNames: string[]
+}
