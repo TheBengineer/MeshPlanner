@@ -385,3 +385,117 @@ export async function fetchOsmSites(bbox: Bbox, tags?: string[]): Promise<Candid
     return []
   }
 }
+
+// ── Building footprint query ──
+
+/**
+ * Overpass API response element with full geometry (``out geom``).
+ */
+interface OverpassGeomElement {
+  type: string
+  id: number
+  geometry: { lat: number; lon: number }[]
+}
+
+interface OverpassGeomResponse {
+  elements?: OverpassGeomElement[]
+}
+
+/**
+ * Query OpenStreetMap for building footprints within a bounding box.
+ *
+ * Uses Overpass API's ``out geom`` to retrieve full polygon geometry
+ * for each building way. Returns polygon coordinates in ``[lng, lat]``
+ * order (GeoJSON convention) and a count of buildings found.
+ *
+ * Rate limiting is enforced at **1 request per second** to respect the
+ * Overpass API usage policy.
+ *
+ * @param bbox - Bounding box with keys ``west``, ``south``, ``east``, ``north``.
+ * @param signal - Optional ``AbortSignal`` to cancel the request.
+ * @returns Object with ``coordinates`` (array of polygon rings) and
+ *   ``count`` of buildings. Returns ``{ coordinates: [], count: 0 }``
+ *   on any failure — this function never throws.
+ *
+ * @example
+ * ```ts
+ * import { fetchOsmBuildings } from '@/lib/sites/osm'
+ * const bbox = { west: -82.6, south: 35.5, east: -82.4, north: 35.7 }
+ * const { coordinates, count } = await fetchOsmBuildings(bbox)
+ * // coordinates[0] => [[-82.5, 35.6], [-82.49, 35.6], ...]
+ * ```
+ */
+export async function fetchOsmBuildings(
+  bbox: Bbox,
+  signal?: AbortSignal,
+): Promise<{ coordinates: [number, number][][]; count: number }> {
+  const bboxStr = `${bbox.south},${bbox.west},${bbox.north},${bbox.east}`
+  const query = `[out:json];\nway["building"](${bboxStr});\nout geom;\n`
+
+  await rateLimit()
+
+  if (signal?.aborted) return { coordinates: [], count: 0 }
+
+  const url = `${OVERPASS_URL}?data=${encodeURIComponent(query)}`
+  const headers = { "User-Agent": USER_AGENT }
+
+  let resp: Response
+  try {
+    resp = await fetch(url, { headers, signal })
+  } catch {
+    return { coordinates: [], count: 0 }
+  }
+
+  // Retry once on 429
+  if (resp.status === 429) {
+    await sleep(5_000)
+    if (signal?.aborted) return { coordinates: [], count: 0 }
+    try {
+      resp = await fetch(url, { headers, signal })
+    } catch {
+      return { coordinates: [], count: 0 }
+    }
+  }
+
+  if (!resp.ok) {
+    return { coordinates: [], count: 0 }
+  }
+
+  let data: unknown
+  try {
+    data = await resp.json()
+  } catch {
+    return { coordinates: [], count: 0 }
+  }
+
+  if (typeof data !== "object" || data === null) {
+    return { coordinates: [], count: 0 }
+  }
+
+  const elements = (data as OverpassGeomResponse).elements
+  if (!Array.isArray(elements)) {
+    return { coordinates: [], count: 0 }
+  }
+
+  const coordinates: [number, number][][] = []
+  for (const element of elements) {
+    if (element.type !== "way" || !Array.isArray(element.geometry)) continue
+    if (element.geometry.length < 3) continue
+
+    const ring: [number, number][] = element.geometry.map(
+      (pt) => [pt.lon, pt.lat] as [number, number],
+    )
+
+    // Close the ring if Overpass didn't (first === last is required for
+    // valid GeoJSON polygons).
+    const first = ring[0]!
+    const last = ring[ring.length - 1]!
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      ring.push([first[0], first[1]])
+    }
+
+    coordinates.push(ring)
+  }
+
+  return { coordinates, count: coordinates.length }
+}

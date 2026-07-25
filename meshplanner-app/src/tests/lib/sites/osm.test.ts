@@ -3,6 +3,7 @@ import {
   buildOverpassQuery,
   elementToSite,
   elementsToSites,
+  fetchOsmBuildings,
   fetchOsmSites,
   getLabelFromTags,
   parseTags,
@@ -453,5 +454,205 @@ describe("fetchOsmSites", () => {
 
     const sites = await fetchOsmSites(mockBbox)
     expect(sites).toEqual([])
+  }, 15_000)
+})
+
+// ── fetchOsmBuildings ──
+
+describe("fetchOsmBuildings", () => {
+  it("returns building coordinates and count from a successful fetch", async () => {
+    const mockElements = [
+      {
+        type: "way",
+        id: 1,
+        geometry: [
+          { lat: 35.6, lon: -82.5 },
+          { lat: 35.61, lon: -82.49 },
+          { lat: 35.61, lon: -82.48 },
+          { lat: 35.6, lon: -82.5 },
+        ],
+      },
+      {
+        type: "way",
+        id: 2,
+        geometry: [
+          { lat: 35.62, lon: -82.52 },
+          { lat: 35.63, lon: -82.51 },
+          { lat: 35.62, lon: -82.50 },
+          { lat: 35.62, lon: -82.52 },
+        ],
+      },
+    ]
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ elements: mockElements }), { status: 200 }),
+    )
+
+    const result = await fetchOsmBuildings(mockBbox)
+    expect(result.count).toBe(2)
+    expect(result.coordinates).toHaveLength(2)
+    // First building: 4 points in [lng, lat] order
+    expect(result.coordinates[0]).toEqual([
+      [-82.5, 35.6],
+      [-82.49, 35.61],
+      [-82.48, 35.61],
+      [-82.5, 35.6],
+    ])
+  })
+
+  it("closes unclosed polygon rings", async () => {
+    const mockElements = [
+      {
+        type: "way",
+        id: 42,
+        geometry: [
+          { lat: 35.6, lon: -82.5 },
+          { lat: 35.61, lon: -82.49 },
+          { lat: 35.61, lon: -82.48 },
+          // missing closing point
+        ],
+      },
+    ]
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ elements: mockElements }), { status: 200 }),
+    )
+
+    const result = await fetchOsmBuildings(mockBbox)
+    expect(result.count).toBe(1)
+    expect(result.coordinates[0]).toHaveLength(4)
+    // Last point must equal first point
+    expect(result.coordinates[0][3]).toEqual(result.coordinates[0][0])
+  })
+
+  it("returns empty when response has no elements", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ elements: [] }), { status: 200 }),
+    )
+
+    const result = await fetchOsmBuildings(mockBbox)
+    expect(result).toEqual({ coordinates: [], count: 0 })
+  })
+
+  it("returns empty on HTTP 500", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(null, { status: 500 }))
+
+    const result = await fetchOsmBuildings(mockBbox)
+    expect(result).toEqual({ coordinates: [], count: 0 })
+  })
+
+  it("returns empty on network error", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("Network error"))
+
+    const result = await fetchOsmBuildings(mockBbox)
+    expect(result).toEqual({ coordinates: [], count: 0 })
+  })
+
+  it("returns empty on malformed JSON response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response("not json", { status: 200 }))
+
+    const result = await fetchOsmBuildings(mockBbox)
+    expect(result).toEqual({ coordinates: [], count: 0 })
+  })
+
+  it("returns empty on unexpected response structure", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ notElements: true }), { status: 200 }),
+    )
+
+    const result = await fetchOsmBuildings(mockBbox)
+    expect(result).toEqual({ coordinates: [], count: 0 })
+  })
+
+  it("filters out non-way elements", async () => {
+    const mockElements = [
+      { type: "node", id: 1, geometry: [{ lat: 35.6, lon: -82.5 }] },
+      {
+        type: "way",
+        id: 2,
+        geometry: [
+          { lat: 35.6, lon: -82.5 },
+          { lat: 35.61, lon: -82.49 },
+          { lat: 35.61, lon: -82.48 },
+          { lat: 35.6, lon: -82.5 },
+        ],
+      },
+      { type: "relation", id: 3, geometry: [] },
+    ]
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ elements: mockElements }), { status: 200 }),
+    )
+
+    const result = await fetchOsmBuildings(mockBbox)
+    expect(result.count).toBe(1)
+  })
+
+  it("filters out elements with fewer than 3 geometry points", async () => {
+    const mockElements = [
+      {
+        type: "way",
+        id: 1,
+        geometry: [{ lat: 35.6, lon: -82.5 }, { lat: 35.61, lon: -82.5 }],
+      },
+      {
+        type: "way",
+        id: 2,
+        geometry: [
+          { lat: 35.6, lon: -82.5 },
+          { lat: 35.61, lon: -82.49 },
+          { lat: 35.61, lon: -82.48 },
+          { lat: 35.6, lon: -82.5 },
+        ],
+      },
+    ]
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ elements: mockElements }), { status: 200 }),
+    )
+
+    const result = await fetchOsmBuildings(mockBbox)
+    expect(result.count).toBe(1)
+  })
+
+  it("handles abort signal gracefully", async () => {
+    const abortController = new AbortController()
+    abortController.abort()
+
+    // Signal is aborted before fetch; mock only to guard against
+    // unexpected fetch calls through rateLimit timing edge cases.
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("Should not reach fetch"))
+
+    const result = await fetchOsmBuildings(mockBbox, abortController.signal)
+    expect(result).toEqual({ coordinates: [], count: 0 })
+  })
+
+  it("retries once on 429 response", async () => {
+    const mockElements = [
+      {
+        type: "way",
+        id: 1,
+        geometry: [
+          { lat: 35.6, lon: -82.5 },
+          { lat: 35.61, lon: -82.49 },
+          { lat: 35.61, lon: -82.48 },
+          { lat: 35.6, lon: -82.5 },
+        ],
+      },
+    ]
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ elements: mockElements }), { status: 200 }),
+      )
+
+    const result = await fetchOsmBuildings(mockBbox)
+    expect(result.count).toBe(1)
+    expect(fetch).toHaveBeenCalledTimes(2)
+  }, 15_000)
+
+  it("returns empty when 429 retry also fails", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
+
+    const result = await fetchOsmBuildings(mockBbox)
+    expect(result).toEqual({ coordinates: [], count: 0 })
   }, 15_000)
 })
