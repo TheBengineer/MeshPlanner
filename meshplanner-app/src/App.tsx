@@ -146,7 +146,24 @@ export default function App() {
   const closeSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen])
 
   return (
-    <div className="app-layout">
+    <>
+      {/* Top bar */}
+      <div className="top-bar">
+        <h2 data-testid="app-title">MeshPlanner</h2>
+        <div className="top-bar__actions">
+          <select
+            value={mode}
+            onChange={e => setMode(e.target.value as AppMode)}
+            aria-label="Application mode"
+          >
+            <option value="single">Single Coverage</option>
+            <option value="optimize">Optimize</option>
+            <option value="batch">Batch</option>
+            <option value="meshplan">Mesh Plan</option>
+          </select>
+        </div>
+      </div>
+      <div className="app-layout">
       {/* Hamburger toggle */}
       <button
         data-testid="hamburger-toggle"
@@ -178,25 +195,7 @@ export default function App() {
         aria-modal={sidebarOpen ? "true" : undefined}
       >
         <div className="sidebar-header">
-          <h2 data-testid="app-title" className="app-title">MeshPlanner</h2>
           <p className="app-subtitle">LoRa Site Planner</p>
-        </div>
-
-        <div className="sidebar-section sidebar-section--padded">
-          <label className="form-label--mode">
-            Mode
-            <select
-              value={mode}
-              onChange={e => setMode(e.target.value as AppMode)}
-              className="form-control--full"
-              aria-label="Application mode"
-            >
-              <option value="single">Single Coverage</option>
-              <option value="optimize">Optimize</option>
-              <option value="batch">Batch</option>
-              <option value="meshplan">Mesh Plan</option>
-            </select>
-          </label>
         </div>
 
         <div className="sidebar-section sidebar-section--padded">
@@ -339,5 +338,6 @@ export default function App() {
         </Suspense>
       </div>
     </div>
+    </>
   )
 }
