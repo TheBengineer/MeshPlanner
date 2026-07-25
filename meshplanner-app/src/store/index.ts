@@ -57,6 +57,7 @@ export interface MapSlice {
   coverageGeoJson: GeoJSON.FeatureCollection | null
   coverageImage: CoverageImageResult | null
   terrainImage: TerrainImageResult | null
+  buildingFootprints: [number, number][][] | null
   viewport: { latitude: number; longitude: number; zoom: number }
   centerOnSite: number
   setBbox: (bbox: Bbox | null) => void
@@ -64,6 +65,7 @@ export interface MapSlice {
   setCoverageGeoJson: (gj: GeoJSON.FeatureCollection | null) => void
   setCoverageImage: (img: CoverageImageResult | null) => void
   setTerrainImage: (img: TerrainImageResult | null) => void
+  setBuildingFootprints: (footprints: [number, number][][] | null) => void
   setViewport: (vp: { latitude: number; longitude: number; zoom: number }) => void
   triggerCenterOnSite: () => void
 }
@@ -79,6 +81,7 @@ export interface UISlice {
   placing: boolean
   colormap: string
   showTerrain: boolean
+  showBuildings: boolean
   progress: { current: number; total: number; label: string } | null
   setMode: (mode: AppMode) => void
   setSidebarOpen: (open: boolean) => void
@@ -86,6 +89,7 @@ export interface UISlice {
   setPlacing: (v: boolean) => void
   setColormap: (v: string) => void
   setShowTerrain: (v: boolean) => void
+  setShowBuildings: (v: boolean) => void
   setProgress: (p: { current: number; total: number; label: string } | null) => void
 }
 
@@ -210,6 +214,7 @@ export const useStore = create<AppStore>((set, get) => ({
     debugTerrain: false,
     optimizationMode: 'min-sites',
     showTerrain: false,
+    showBuildings: true,
     colormap: 'plasma',
   },
   linkBudget: null,
@@ -236,6 +241,7 @@ export const useStore = create<AppStore>((set, get) => ({
       // UISlice fields live outside coverageParams
       if (key === 'colormap') return { settings, colormap: value }
       if (key === 'showTerrain') return { settings, showTerrain: value }
+      if (key === 'showBuildings') return { settings, showBuildings: value }
       // Everything else → coverageParams
       return { settings, coverageParams: { ...s.coverageParams, [key]: value } }
     }),
@@ -251,6 +257,7 @@ export const useStore = create<AppStore>((set, get) => ({
   coverageGeoJson: null,
   coverageImage: null,
   terrainImage: null,
+  buildingFootprints: null,
   viewport: { latitude: 35.6, longitude: -82.5, zoom: 10 },
   centerOnSite: 0,
 
@@ -259,6 +266,7 @@ export const useStore = create<AppStore>((set, get) => ({
   setCoverageGeoJson: (gj) => set({ coverageGeoJson: gj }),
   setCoverageImage: (img) => set({ coverageImage: img }),
   setTerrainImage: (img) => set({ terrainImage: img }),
+  setBuildingFootprints: (footprints) => set({ buildingFootprints: footprints }),
   setViewport: (vp) => set({ viewport: vp }),
   triggerCenterOnSite: () => set((s) => ({ centerOnSite: s.centerOnSite + 1 })),
 
@@ -269,6 +277,7 @@ export const useStore = create<AppStore>((set, get) => ({
   placing: false,
   colormap: 'plasma',
   showTerrain: false,
+  showBuildings: true,
   progress: null,
 
   setMode: (mode) => set({ mode }),
@@ -277,6 +286,7 @@ export const useStore = create<AppStore>((set, get) => ({
   setPlacing: (v) => set({ placing: v }),
   setColormap: (v) => set((s) => ({ colormap: v, settings: { ...s.settings, colormap: v } })),
   setShowTerrain: (v) => set((s) => ({ showTerrain: v, settings: { ...s.settings, showTerrain: v } })),
+  setShowBuildings: (v) => set({ showBuildings: v }),
   setProgress: (p) => set({ progress: p }),
 
   /* Results */

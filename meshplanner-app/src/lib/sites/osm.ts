@@ -35,6 +35,19 @@ interface OverpassResponse {
   elements?: OverpassElement[]
 }
 
+/**
+ * Optional configuration for {@link fetchOsmSites}.
+ */
+export interface FetchOsmOptions {
+  /** Optional AbortSignal for cancellation / timeout. */
+  signal?: AbortSignal
+  /**
+   * Callback invoked with a user-friendly message when the fetch
+   * fails or returns no results.
+   */
+  onError?: (msg: string) => void
+}
+
 // ── Tag specifications ──
 //
 // Each entry maps a short user-facing tag identifier to:
@@ -189,7 +202,10 @@ async function rateLimit(): Promise<void> {
  *
  * Throws on network / HTTP errors, 429 (after one retry), or malformed responses.
  */
-async function callOverpass(query: string): Promise<OverpassElement[]> {
+async function callOverpass(
+  query: string,
+  signal?: AbortSignal,
+): Promise<OverpassElement[]> {
   await rateLimit()
 
   const url = `${OVERPASS_URL}?data=${encodeURIComponent(query)}`
@@ -197,17 +213,24 @@ async function callOverpass(query: string): Promise<OverpassElement[]> {
 
   let resp: Response
   try {
-    resp = await fetch(url, { headers })
-  } catch {
+    resp = await fetch(url, { headers, signal })
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") throw err
     throw new Error("Overpass API network error")
   }
 
   // Retry once on 429
   if (resp.status === 429) {
     await sleep(5_000)
+    if (signal?.aborted) {
+      const err = new Error("Aborted")
+      err.name = "AbortError"
+      throw err
+    }
     try {
-      resp = await fetch(url, { headers })
-    } catch {
+      resp = await fetch(url, { headers, signal })
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") throw err
       throw new Error("Overpass API network error on retry")
     }
   }
@@ -341,6 +364,27 @@ export function elementsToSites(elements: OverpassElement[]): CandidateSite[] {
   return sites
 }
 
+// ── Error categorisation ──
+
+function toErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    // AbortError — the request was cancelled or timed out
+    if (err.name === "AbortError") {
+      return "Request timed out — try a smaller area"
+    }
+    // Network error from callOverpass
+    if (err.message.toLowerCase().includes("network error")) {
+      return "Network error — check internet connection"
+    }
+    // HTTP status from callOverpass
+    const httpMatch = err.message.match(/^Overpass API HTTP (\d+)$/)
+    if (httpMatch) {
+      return `Server returned ${httpMatch[1]}`
+    }
+  }
+  return "Could not load sites from OpenStreetMap"
+}
+
 // ── Public API ──
 
 /**
@@ -355,6 +399,7 @@ export function elementsToSites(elements: OverpassElement[]): CandidateSite[] {
  *     ``fire_station``, ``school``, ``hospital``, ``tower``, ``water_tower``.
  *   - An explicit ``"key=value"`` string (e.g. ``"amenity=police"``).
  *   Defaults to all built-in tags.
+ * @param options - Optional configuration (signal, error callback).
  * @returns List of {@link CandidateSite} objects. Returns an **empty array** on
  *   any failure (network error, rate limiting, malformed response) — this
  *   function never throws.
@@ -367,7 +412,11 @@ export function elementsToSites(elements: OverpassElement[]): CandidateSite[] {
  * // sites: [{ name: 'Asheville Fire Station #1', latitude: 35.595, ... }]
  * ```
  */
-export async function fetchOsmSites(bbox: Bbox, tags?: string[]): Promise<CandidateSite[]> {
+export async function fetchOsmSites(
+  bbox: Bbox,
+  tags?: string[],
+  options?: FetchOsmOptions,
+): Promise<CandidateSite[]> {
   let resolved: ResolvedTag[]
   try {
     resolved = parseTags(tags)
@@ -376,12 +425,19 @@ export async function fetchOsmSites(bbox: Bbox, tags?: string[]): Promise<Candid
   }
 
   const query = buildOverpassQuery(bbox, resolved)
+  const { onError } = options ?? {}
+  const signal = options?.signal
 
   try {
-    const elements = await callOverpass(query)
-    if (elements.length === 0) return []
+    const elements = await callOverpass(query, signal)
+    if (elements.length === 0) {
+      const label = resolved.map((r) => r.label).join(", ")
+      onError?.(`No ${label} found in this area`)
+      return []
+    }
     return elementsToSites(elements)
-  } catch {
+  } catch (err) {
+    onError?.(toErrorMessage(err))
     return []
   }
 }

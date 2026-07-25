@@ -455,6 +455,65 @@ describe("fetchOsmSites", () => {
     const sites = await fetchOsmSites(mockBbox)
     expect(sites).toEqual([])
   }, 15_000)
+
+  // ── onError callback ──
+
+  it("calls onError with network error message on fetch failure", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("Network error"))
+
+    const onError = vi.fn()
+    const sites = await fetchOsmSites(mockBbox, undefined, { onError })
+    expect(sites).toEqual([])
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError).toHaveBeenCalledWith("Network error — check internet connection")
+  })
+
+  it("calls onError with HTTP error message on server error", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(null, { status: 502 }))
+
+    const onError = vi.fn()
+    const sites = await fetchOsmSites(mockBbox, undefined, { onError })
+    expect(sites).toEqual([])
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError).toHaveBeenCalledWith("Server returned 502")
+  })
+
+  it("calls onError with no-results message when elements array is empty", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ elements: [] }), { status: 200 }),
+    )
+
+    const onError = vi.fn()
+    const sites = await fetchOsmSites(mockBbox, undefined, { onError })
+    expect(sites).toEqual([])
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError).toHaveBeenCalledWith(
+      "No Fire Station, School, Hospital, Police Station, Town Hall, Tower, Water Tower found in this area",
+    )
+  })
+
+  it("does not call onError on successful fetch", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ elements: [{ type: "node", id: 1, lat: 35.6, lon: -82.5, tags: {} }] }), { status: 200 }),
+    )
+
+    const onError = vi.fn()
+    const sites = await fetchOsmSites(mockBbox, undefined, { onError })
+    expect(sites).toHaveLength(1)
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it("calls onError with timeout message on abort signal", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(
+      Object.assign(new Error("The user aborted a request."), { name: "AbortError" }),
+    )
+
+    const onError = vi.fn()
+    const sites = await fetchOsmSites(mockBbox, undefined, { onError })
+    expect(sites).toEqual([])
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError).toHaveBeenCalledWith("Request timed out — try a smaller area")
+  })
 })
 
 // ── fetchOsmBuildings ──

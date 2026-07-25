@@ -4,6 +4,7 @@ import { SiteForm } from '@/components/sidebar/SiteForm'
 import { LoraParamsForm } from '@/components/sidebar/LoraParamsForm'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
+import { CriticalInfraImport } from '@/components/common/CriticalInfraImport'
 import { parseSitesCsv } from '@/lib/sites/csv'
 import { parseSitesGeoJson } from '@/lib/sites/geojson'
 import { useStore } from '@/store'
@@ -22,7 +23,7 @@ export default function App() {
     updateSitePosition,
     setMode, toggleSiteSelection, selectedSiteNames,
     coverageImage, updateCoverageParams,
-    placing, setPlacing, showTerrain, setShowTerrain, terrainImage, setTerrainImage,
+    placing, setPlacing, showTerrain, setShowTerrain, showBuildings, setShowBuildings, terrainImage, setTerrainImage,
   } = useStore()
 
   const placeCounter = useRef(0)
@@ -208,6 +209,28 @@ export default function App() {
             {showTerrain ? 'Terrain On' : 'Show Terrain'}
           </button>
 
+          {/* Building footprints toggle */}
+          <button
+            type="button"
+            data-testid="buildings-toggle"
+            onClick={() => setShowBuildings(!showBuildings)}
+            aria-pressed={showBuildings}
+            style={{
+              width: '100%',
+              marginTop: 6,
+              padding: '6px 10px',
+              fontSize: 12,
+              fontWeight: 600,
+              border: showBuildings ? '1px solid var(--accent)' : '1px solid var(--border)',
+              borderRadius: 4,
+              cursor: 'pointer',
+              background: showBuildings ? 'var(--accent)' : 'var(--bg)',
+              color: showBuildings ? '#fff' : 'var(--text-h)',
+            }}
+          >
+            {showBuildings ? 'Buildings On' : 'Show Buildings'}
+          </button>
+
           {/* Place button — toggles placing mode */}
           <button
             type="button"
@@ -234,6 +257,7 @@ export default function App() {
           </button>
 
           <FileUpload onFile={handleFileUpload} label="Upload CSV/GeoJSON" />
+          <CriticalInfraImport />
           <button type="button" onClick={() => useStore.getState().triggerCenterOnSite()} style={{ width: '100%', padding: '4px 8px', marginTop: 4, marginBottom: 4, fontSize: 12 }}>Center on site</button>
           <SiteList
             sites={sites}

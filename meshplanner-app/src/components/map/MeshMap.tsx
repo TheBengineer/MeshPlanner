@@ -97,6 +97,8 @@ export function MeshMap({
   const hilltopCandidates = useStore((s) => s.hilltopCandidates)
   const meshPlanResult = useStore((s) => s.meshPlanResult)
   const meshPlanPhase = useStore((s) => s.meshPlanPhase)
+  const buildingFootprints = useStore((s) => s.buildingFootprints)
+  const showBuildings = useStore((s) => s.showBuildings)
 
   /* ── Auto-compute bbox from selected sites + max range ── */
   const selectedSites = useMemo(
@@ -124,6 +126,18 @@ export function MeshMap({
     }).filter((f): f is NonNullable<typeof f> => f !== null)
     return { type: 'FeatureCollection' as const, features }
   }, [meshPlanResult])
+  const buildingsGeoJson = useMemo(() => {
+    if (!buildingFootprints || buildingFootprints.length === 0) return null
+    const features = buildingFootprints.map((ring) => ({
+      type: 'Feature' as const,
+      properties: {},
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [ring],
+      },
+    }))
+    return { type: 'FeatureCollection' as const, features }
+  }, [buildingFootprints])
   const [initialised, setInitialised] = useState(false)
   useEffect(() => {
     if (!initialised && autoBbox) {
@@ -527,6 +541,28 @@ export function MeshMap({
               paint={{
                 'fill-color': '#ff0000',
                 'fill-opacity': 0.15,
+              }}
+            />
+          </Source>
+        )}
+
+        {/* ── Building footprints ── */}
+        {showBuildings && buildingsGeoJson && (
+          <Source id="buildings-source" type="geojson" data={buildingsGeoJson}>
+            <Layer
+              id="buildings-layer-fill"
+              type="fill"
+              paint={{
+                'fill-color': '#e67e22',
+                'fill-opacity': 0.3,
+              }}
+            />
+            <Layer
+              id="buildings-layer-outline"
+              type="line"
+              paint={{
+                'line-color': '#d35400',
+                'line-width': 1,
               }}
             />
           </Source>
