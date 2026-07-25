@@ -489,7 +489,6 @@ export function ExportPanel() {
           Summary Report
         </button>
       </div>
-    </div>
 
       {meshPlanPhase === "complete" && meshPlanResult && (
         <div style={{ marginTop: 12 }}>
