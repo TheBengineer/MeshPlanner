@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Bbox, CandidateSite, LoraParams, LinkBudget, CoverageRaster, OptimizationResult, HilltopScored, MstEdge, MeshPlanResult, MeshPlanPhase } from "@/lib/types"
+import type { Bbox, CandidateSite, LoraParams, LinkBudget, CoverageRaster, OptimizationResult, HilltopScored, MstEdge, MeshPlanResult, MeshPlanPhase, SiteCoverageIndex } from "@/lib/types"
 import type { CoverageImageResult } from "@/lib/render/coverage-image"
 import type { TerrainImageResult } from "@/lib/render/terrain-image"
 import { DEFAULT_LORA_PARAMS } from "@/lib/constants"
@@ -142,11 +142,13 @@ export interface MeshPlanningSlice {
   mstEdges: MstEdge[]
   meshPlanPhase: MeshPlanPhase
   meshPlanProgress: { current: number; total: number; label: string } | null
+  siteCoverageIndex: SiteCoverageIndex | null
   setHilltopCandidates: (candidates: HilltopScored[]) => void
   setMeshPlanResult: (result: MeshPlanResult | null) => void
   setMstEdges: (edges: MstEdge[]) => void
   setMeshPlanPhase: (phase: MeshPlanPhase) => void
   setMeshPlanProgress: (p: { current: number; total: number; label: string } | null) => void
+  setSiteCoverageIndex: (index: SiteCoverageIndex | null) => void
 }
 
 /* ── Combined store ── */
@@ -326,12 +328,14 @@ export const useStore = create<AppStore>((set, get) => ({
   mstEdges: [],
   meshPlanPhase: 'idle',
   meshPlanProgress: null,
+  siteCoverageIndex: null,
 
   setHilltopCandidates: (candidates) => set({ hilltopCandidates: candidates }),
   setMeshPlanResult: (result) => set({ meshPlanResult: result }),
   setMstEdges: (edges) => set({ mstEdges: edges }),
   setMeshPlanPhase: (phase) => set({ meshPlanPhase: phase }),
   setMeshPlanProgress: (p) => set({ meshPlanProgress: p }),
+  setSiteCoverageIndex: (index) => set({ siteCoverageIndex: index }),
 }))
 
 /* ── Expose store on window for E2E test access ── */
