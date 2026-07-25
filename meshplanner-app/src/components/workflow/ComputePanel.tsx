@@ -9,9 +9,14 @@ import { computeCoverageWithWorkers } from "@/workers/coverage-manager"
 import { WasmCoverageEngine } from "@/engine/WasmCoverageEngine"
 import { coverageImage } from "@/lib/render/coverage-image"
 import { terrainImage } from "@/lib/render/terrain-image"
-import type { CoverageRaster, OptimizationResult } from "@/lib/types"
+import type { CoverageRaster, OptimizationResult, MeshPlanResult, HilltopScored } from "@/lib/types"
 import type { EngineRunParams } from "@/engine/core"
 import { Affine } from "@/lib/math/affine"
+import { scoutTerrain } from "@/lib/planning/scout"
+import { buildMeshCoverageMatrix } from "@/lib/planning/matrix-builder"
+import { computeConnectivityGraph } from "@/lib/planning/connectivity"
+import { selectMeshSites } from "@/lib/planning/selector"
+import { buildMst } from "@/lib/planning/mst"
 import { useStore } from "@/store"
 
 /* ── Point-in-polygon test (ray casting) ── */
@@ -52,6 +57,7 @@ const primaryBtn = (disabled: boolean): React.CSSProperties => ({
 
 export function ComputePanel() {
   const {
+    mode,
     bbox,
     coverageZone,
     sites,
@@ -79,6 +85,17 @@ export function ComputePanel() {
     setOptimizationPhase,
     setImprovement,
     setError,
+    /* Mesh planning */
+    hilltopCandidates,
+    meshPlanResult,
+    mstEdges,
+    meshPlanPhase,
+    meshPlanProgress,
+    setHilltopCandidates,
+    setMeshPlanResult,
+    setMstEdges,
+    setMeshPlanPhase,
+    setMeshPlanProgress,
   } = useStore()
 
   const resultsPanelRef = useRef<HTMLDivElement>(null)
@@ -442,6 +459,146 @@ export function ComputePanel() {
     setOptimizationPhase, setImprovement, setError,
   ])
 
+  const meshPlanInFlight = useRef(false)
+
+  const handleMeshPlan = useCallback(async () => {
+    if (meshPlanInFlight.current) return
+    if (!bbox) { setError("Draw or enter a bounding box first"); return }
+
+    meshPlanInFlight.current = true
+
+    setComputing(true)
+    setError(null)
+    setHilltopCandidates([])
+    setMeshPlanResult(null)
+    setMstEdges([])
+    setMeshPlanPhase("scout")
+    setOptimizationPhase("computing")
+
+    const { targetCoverage, maxRangeKm, numRadials, highRes } = coverageParams
+    const ippd = highRes ? 3600 : 1200
+    const demZoom = highRes ? 13 : 12
+
+    const planStartTime = performance.now()
+
+    try {
+      // ── SCOUT phase: fetch DEM + detect hilltops ──
+      setProgress({ current: 0, total: 100, label: "Scanning terrain…" })
+      const demBbox = {
+        west: Math.floor(bbox.west),
+        south: Math.floor(bbox.south),
+        east: Math.ceil(bbox.east),
+        north: Math.ceil(bbox.north),
+      }
+      let dem
+      try {
+        dem = await fetchDemRaster(demBbox, (pct) => {
+          setDemPct(pct)
+          setProgress({ current: Math.round(pct * 0.2), total: 100, label: "Scanning terrain…" })
+        }, demZoom)
+      } catch (demErr) {
+        const msg = demErr instanceof Error ? demErr.message : "Unknown DEM error"
+        throw new Error(
+          `Failed to fetch elevation data. ${msg}. Check your network connection and try again.`,
+        )
+      }
+      const demAffine = dem.affine
+
+      const candidates = await scoutTerrain(
+        dem.data, dem.width, dem.height, demAffine, bbox,
+      )
+      if (candidates.length === 0) {
+        throw new Error("No hilltop candidates found in the current area. Try a different bounding box.")
+      }
+      setHilltopCandidates(candidates)
+      setMeshPlanProgress({ current: 20, total: 100, label: `${candidates.length} candidates found` })
+      setProgress({ current: 20, total: 100, label: `${candidates.length} candidates found` })
+      setMeshPlanPhase("compute")
+
+      // ── COMPUTE phase: build coverage matrix ──
+      setMeshPlanProgress({ current: 20, total: 100, label: "Computing coverage matrices…" })
+      setProgress({ current: 20, total: 100, label: "Computing coverage matrices…" })
+      const matrixResult = await buildMeshCoverageMatrix(
+        candidates,
+        dem.data, dem.width, dem.height, demAffine,
+        params,
+        { maxRangeKm, threshold: coverageParams.threshold, numRadials },
+        undefined,
+        (done, total) => {
+          const pct = 20 + Math.round((done / total) * 40)
+          setMeshPlanProgress({ current: pct, total: 100, label: `Computing coverage (${done}/${total})…` })
+          setProgress({ current: pct, total: 100, label: `Computing coverage (${done}/${total})…` })
+        },
+      )
+      setProgress({ current: 60, total: 100, label: "Computing connectivity…" })
+      setMeshPlanProgress({ current: 60, total: 100, label: "Computing connectivity…" })
+      setMeshPlanPhase("select")
+
+      // ── SELECT phase: connectivity + greedy selector ──
+      const connectivityEdges = computeConnectivityGraph(
+        candidates,
+        dem.data, dem.width, dem.height, demAffine,
+        maxRangeKm,
+        {
+          frequencyMhz: params.frequencyMhz,
+          txHeightM: params.txHeightM,
+          rxHeightM: params.rxHeightM,
+        },
+      )
+      const selectorResult = selectMeshSites(
+        matrixResult.matrix,
+        matrixResult.siteNames,
+        connectivityEdges,
+        targetCoverage,
+      )
+      setProgress({ current: 90, total: 100, label: "Building mesh tree…" })
+      setMeshPlanProgress({ current: 90, total: 100, label: "Building mesh tree…" })
+      setMeshPlanPhase("mst")
+
+      // ── MST phase: build minimum spanning tree ──
+      const mstEdges = buildMst(selectorResult.selected, connectivityEdges, candidates.length)
+      setMstEdges(mstEdges)
+
+      const planTimeS = (performance.now() - planStartTime) / 1000
+
+      const result: MeshPlanResult = {
+        selectedCandidates: selectorResult.selected.map((i) => candidates[i]).filter((c): c is HilltopScored => c !== undefined),
+        mstEdges,
+        coveredFraction: selectorResult.coveredFraction,
+        totalCandidates: candidates.length,
+        solveTimeS: planTimeS,
+        gapFraction: 1 - selectorResult.coveredFraction,
+        connected: selectorResult.connected,
+      }
+      setMeshPlanResult(result)
+      setMeshPlanPhase("complete")
+      setMeshPlanProgress({ current: 100, total: 100, label: "Plan complete" })
+      setProgress({ current: 100, total: 100, label: "Plan complete" })
+      setOptimizationPhase("greedy")
+
+      // Focus results panel after compute completes
+      resultsPanelRef.current?.focus()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Mesh planning failed"
+      setError(msg)
+      setMeshPlanPhase("error")
+      console.error("Mesh plan error:", err)
+      setTimeout(() => {
+        errorRef.current?.focus()
+      }, 0)
+    } finally {
+      setComputing(false)
+      setProgress(null)
+      setMeshPlanProgress(null)
+      meshPlanInFlight.current = false
+    }
+  }, [
+    bbox, params, coverageParams,
+    setComputing, setProgress, setError,
+    setHilltopCandidates, setMeshPlanResult, setMstEdges,
+    setMeshPlanPhase, setMeshPlanProgress, setOptimizationPhase,
+  ])
+
   const handleExportGeoJson = useCallback(() => {
     const gj = useStore.getState().coverageGeoJson
     if (gj) downloadGeoJson(gj)
@@ -467,6 +624,22 @@ export function ComputePanel() {
 
   const disableButton = computing || !bbox || selectedSiteNames.length === 0
 
+  const isMeshPlanRunning = meshPlanPhase !== "idle" && meshPlanPhase !== "complete" && meshPlanPhase !== "error"
+  const disableMeshPlanButton = computing || !bbox
+
+  const meshPlanButtonLabel = (() => {
+    if (!computing) return "Plan Mesh"
+    switch (meshPlanPhase) {
+      case "scout": return "Scouting terrain…"
+      case "compute": return "Computing matrices…"
+      case "select": return "Selecting sites…"
+      case "mst": return "Building mesh tree…"
+      case "complete": return "Plan complete"
+      case "error": return "Plan failed"
+      default: return "Planning…"
+    }
+  })()
+
   return (
     <div style={{ borderTop: "1px solid var(--border)", padding: "8px" }}>
 
@@ -479,10 +652,23 @@ export function ComputePanel() {
           disabled={disableButton}
           aria-label={disableButton ? `Compute coverage${!bbox ? " — bounding box required" : ""}${selectedSiteNames.length === 0 ? " — select at least one site" : ""}` : "Compute coverage"}
           aria-busy={computing ? "true" : undefined}
-          style={{ ...primaryBtn(disableButton), flex: 1 }}
+          style={{ ...primaryBtn(disableButton), flex: mode === "meshplan" ? 1 : undefined }}
         >
           {buttonLabel}
         </button>
+        {mode === "meshplan" && (
+          <button
+            type="button"
+            data-testid="mesh-plan-btn"
+            onClick={handleMeshPlan}
+            disabled={disableMeshPlanButton}
+            aria-label={disableMeshPlanButton ? "Plan Mesh — bounding box required" : "Plan Mesh"}
+            aria-busy={isMeshPlanRunning ? "true" : undefined}
+            style={{ ...primaryBtn(disableMeshPlanButton), flex: 1 }}
+          >
+            {meshPlanButtonLabel}
+          </button>
+        )}
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }} title="Show terrain elevation instead of signal strength">
           <input type="checkbox" checked={coverageParams.debugTerrain ?? false} onChange={e => updateCoverageParams({ debugTerrain: e.target.checked })} aria-label="Debug terrain mode" />
           Terrain
@@ -517,6 +703,30 @@ export function ComputePanel() {
           </div>
         )
       })()}
+
+      {/* ── Mesh plan progress bar ── */}
+      {computing && meshPlanProgress && meshPlanPhase !== "idle" && meshPlanPhase !== "complete" && meshPlanPhase !== "error" && (
+        (() => {
+          const pct = Math.min(100, Math.max(0, Math.round((meshPlanProgress.current / meshPlanProgress.total) * 100)))
+          const eta = pct > 0 && elapsed > 0 ? Math.round(elapsed / pct * (100 - pct)) : 0
+          return (
+            <div style={{ marginTop: 8 }} role="status" aria-live="polite" aria-label={meshPlanProgress.label}>
+              <div style={{ height: 8, background: 'var(--bg-secondary)', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 4, transition: 'width 0.3s' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+                <span>{meshPlanProgress.label}</span>
+                <span>{pct}%</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                <span>{elapsed}s elapsed</span>
+                <span>{eta > 0 ? `${eta}s remaining` : ''}</span>
+                <span>{ramMb > 0 ? `${ramMb} MB` : ''}</span>
+              </div>
+            </div>
+          )
+        })()
+      )}
 
       {/* ── Greedy / ILP-loading status ── */}
       {(optimizationPhase === "greedy" || optimizationPhase === "ilp-loading") && (
@@ -601,6 +811,34 @@ export function ComputePanel() {
               type="button"
               onClick={handleRetry}
               aria-label="Retry computation"
+              style={{
+                marginTop: 6,
+                padding: "4px 12px",
+                background: "#7f1d1d",
+                color: "#fca5a5",
+                border: "1px solid #991b1b",
+                borderRadius: 3,
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: 11,
+              }}
+            >
+              Retry
+            </button>
+          )}
+          {/* Show retry button for mesh plan errors */}
+          {meshPlanPhase === "error" && (
+            <button
+              type="button"
+              onClick={() => {
+                setMeshPlanPhase("idle")
+                setError(null)
+                setMeshPlanResult(null)
+                setMstEdges([])
+                setHilltopCandidates([])
+                setMeshPlanProgress(null)
+              }}
+              aria-label="Retry mesh plan"
               style={{
                 marginTop: 6,
                 padding: "4px 12px",
@@ -781,6 +1019,56 @@ export function ComputePanel() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Mesh plan results ── */}
+      {meshPlanPhase === "complete" && meshPlanResult && (
+        <div
+          data-testid="mesh-plan-results"
+          tabIndex={-1}
+          role="region"
+          aria-label="Mesh plan results"
+          style={{
+            marginTop: 8, padding: "8px",
+            background: "var(--bg-secondary)", borderRadius: 4,
+            fontSize: 12, outline: "none",
+            border: "1px solid var(--border)",
+            color: "var(--text)",
+          }}
+        >
+          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13, color: "var(--text-h)" }}>
+            Mesh Plan Results
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 8px" }}>
+            <span style={{ color: "var(--text-secondary)" }}>Selected sites:</span>
+            <span style={{ fontWeight: 600 }}>{meshPlanResult.selectedCandidates.length}</span>
+            <span style={{ color: "var(--text-secondary)" }}>Covered fraction:</span>
+            <span style={{ fontWeight: 600 }}>
+              {(meshPlanResult.coveredFraction * 100).toFixed(1)}%
+            </span>
+            <span style={{ color: "var(--text-secondary)" }}>MST edges:</span>
+            <span style={{ fontWeight: 600 }}>{meshPlanResult.mstEdges.length}</span>
+            <span style={{ color: "var(--text-secondary)" }}>Connectivity:</span>
+            <span style={{ fontWeight: 600, color: meshPlanResult.connected ? "var(--accent)" : "#fca5a5" }}>
+              {meshPlanResult.connected ? "Connected" : `${(() => {
+                const seen = new Set<number>()
+                let components = 0
+                for (const e of meshPlanResult.mstEdges) {
+                  seen.add(e.sourceIdx)
+                  seen.add(e.targetIdx)
+                }
+                const selected = new Set(meshPlanResult.selectedCandidates.map((_, i) => i))
+                const isolated = [...selected].filter(i => !seen.has(i)).length
+                components = (meshPlanResult.selectedCandidates.length - seen.size / 2) + isolated
+                return components
+              })()} components`}
+            </span>
+            <span style={{ color: "var(--text-secondary)" }}>Total candidates:</span>
+            <span style={{ fontWeight: 600 }}>{meshPlanResult.totalCandidates}</span>
+            <span style={{ color: "var(--text-secondary)" }}>Time:</span>
+            <span style={{ fontWeight: 600 }}>{meshPlanResult.solveTimeS.toFixed(1)}s</span>
+          </div>
         </div>
       )}
 
