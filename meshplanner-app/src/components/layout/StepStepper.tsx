@@ -12,7 +12,8 @@ const containerStyle: React.CSSProperties = {
   alignItems: 'flex-start',
   justifyContent: 'center',
   width: '100%',
-  padding: '16px 0',
+  padding: '12px 4px',
+  overflow: 'hidden',
 }
 
 const stepGroupStyle: React.CSSProperties = {
@@ -33,13 +34,13 @@ const stepBtnStyle: React.CSSProperties = {
 
 function circleStyle(isActive: boolean, isCompleted: boolean): React.CSSProperties {
   return {
-    width: 32,
-    height: 32,
+    width: 26,
+    height: 26,
     borderRadius: '50%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: 700,
     transition: 'background 0.15s, color 0.15s',
     background: isActive ? '#3498db' : isCompleted ? '#27ae60' : '#ccc',
@@ -50,22 +51,25 @@ function circleStyle(isActive: boolean, isCompleted: boolean): React.CSSProperti
 function labelStyle(isActive: boolean, isCompleted: boolean): React.CSSProperties {
   const color = isActive ? '#3498db' : isCompleted ? '#27ae60' : '#999'
   return {
-    marginTop: 4,
-    fontSize: 11,
+    marginTop: 2,
+    fontSize: 10,
     fontWeight: isActive ? 600 : 400,
     color,
     whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    maxWidth: 60,
   }
 }
 
 function connectorStyle(isCompleted: boolean): React.CSSProperties {
   return {
-    width: 48,
+    width: 12,
     height: 0,
     borderTop: isCompleted ? '2px solid #27ae60' : '2px dashed #ccc',
-    marginTop: 15,
-    marginLeft: 6,
-    marginRight: 6,
+    marginTop: 12,
+    marginLeft: 2,
+    marginRight: 2,
   }
 }
 
