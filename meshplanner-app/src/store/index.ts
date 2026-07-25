@@ -83,8 +83,12 @@ export interface UISlice {
   colormap: string
   showTerrain: boolean
   showBuildings: boolean
+  guidedMode: boolean
+  activeTab: 'setup' | 'plan' | 'results'
   progress: { current: number; total: number; label: string } | null
   setMode: (mode: AppMode) => void
+  setGuidedMode: (v: boolean) => void
+  setActiveTab: (tab: 'setup' | 'plan' | 'results') => void
   setSidebarOpen: (open: boolean) => void
   setComputing: (v: boolean) => void
   setPlacing: (v: boolean) => void
@@ -218,6 +222,8 @@ export const useStore = create<AppStore>((set, get) => ({
     showTerrain: false,
     showBuildings: true,
     colormap: 'plasma',
+    guidedMode: true,
+    activeTab: 'setup',
   },
   linkBudget: null,
 
@@ -244,6 +250,8 @@ export const useStore = create<AppStore>((set, get) => ({
       if (key === 'colormap') return { settings, colormap: value }
       if (key === 'showTerrain') return { settings, showTerrain: value }
       if (key === 'showBuildings') return { settings, showBuildings: value }
+      if (key === 'guidedMode') return { settings, guidedMode: value }
+      if (key === 'activeTab') return { settings, activeTab: value }
       // Everything else → coverageParams
       return { settings, coverageParams: { ...s.coverageParams, [key]: value } }
     }),
@@ -281,6 +289,8 @@ export const useStore = create<AppStore>((set, get) => ({
   colormap: 'plasma',
   showTerrain: false,
   showBuildings: true,
+  guidedMode: localStorage.getItem('meshplanner-guided-mode') !== 'false',
+  activeTab: 'setup',
   progress: null,
 
   setMode: (mode) => set({ mode }),
@@ -291,6 +301,8 @@ export const useStore = create<AppStore>((set, get) => ({
   setColormap: (v) => set((s) => ({ colormap: v, settings: { ...s.settings, colormap: v } })),
   setShowTerrain: (v) => set((s) => ({ showTerrain: v, settings: { ...s.settings, showTerrain: v } })),
   setShowBuildings: (v) => set({ showBuildings: v }),
+  setGuidedMode: (v) => set((s) => ({ guidedMode: v, settings: { ...s.settings, guidedMode: v } })),
+  setActiveTab: (tab) => set((s) => ({ activeTab: tab, settings: { ...s.settings, activeTab: tab } })),
   setProgress: (p) => set({ progress: p }),
 
   /* Results */
