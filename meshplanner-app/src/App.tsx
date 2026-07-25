@@ -171,6 +171,7 @@ export default function App() {
               <option value="single">Single Coverage</option>
               <option value="optimize">Optimize</option>
               <option value="batch">Batch</option>
+              <option value="meshplan">Mesh Plan</option>
             </select>
           </label>
         </div>
