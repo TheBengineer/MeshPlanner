@@ -371,8 +371,8 @@ export function MeshMap({
                 <div
                   style={{
                     fontSize: 10,
-                    color: '#fff',
-                    textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+                    color: '#000',
+                    textShadow: '0 0 2px rgba(255,255,255,0.8), 0 1px 2px rgba(255,255,255,0.5)',
                     whiteSpace: 'nowrap',
                     position: 'absolute',
                     top: '100%',
