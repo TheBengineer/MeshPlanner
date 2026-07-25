@@ -357,3 +357,67 @@ describe("MST edge specificity", () => {
     expect(totalDist).toBe(3)
   })
 })
+
+// ── Required indices ──────────────────────────────────────────────────────────
+
+describe("requiredIndices", () => {
+  it("pre-seeds required sites into the selected set", () => {
+    // matrix3x5: Site 0 covers {0,1}, Site 1 covers {1,2,3}, Site 2 covers {3,4}
+    // Require Site 2 — it should appear even if greedy would not pick it first.
+    const result = selectMeshSites(matrix3x5(), SITE_NAMES, chainEdges(), 0.8, {
+      requiredIndices: [2],
+    })
+    expect(result.selected).toContain(2)
+    // Without requiredIndices, greedy picks [1, 0]; with Site 2 required, it
+    // should appear early.
+    expect(result.selected.indexOf(2)).toBe(0)
+  })
+
+  it("is backward compatible when requiredIndices is omitted", () => {
+    const withOpt = selectMeshSites(matrix3x5(), SITE_NAMES, chainEdges(), 0.8)
+    const withoutOpt = selectMeshSites(matrix3x5(), SITE_NAMES, chainEdges(), 0.8, {})
+    expect(withOpt.selected).toEqual(withoutOpt.selected)
+    expect(withOpt.coveredFraction).toEqual(withoutOpt.coveredFraction)
+  })
+
+  it("counts required sites' coverage toward the covered fraction", () => {
+    // 2 sites × 4 cells
+    //   Site 0 ─── cells {0, 1}
+    //   Site 1 ─── cells {2, 3}
+    // Require Site 0 only, target=0.5 (need 2/4 cells).
+    // Site 0 alone provides 2 cells → target met, greedy loop does not run.
+    const m: CoverageMatrix = {
+      rowPtr: new Uint32Array([0, 2, 4]),
+      colIndices: new Uint32Array([0, 1, 2, 3]),
+      nSites: 2,
+      nCells: 4,
+    }
+    const result = selectMeshSites(m, ["A", "B"], [], 0.5, {
+      requiredIndices: [0],
+    })
+    expect(result.selected).toEqual([0])
+    expect(result.coveredFraction).toBe(0.5)
+  })
+
+  it("does not re-select a required site via greedy", () => {
+    // matrix3x5: Site 1 has the most coverage (3 cells).
+    // If we require Site 0, the greedy loop should still pick Site 1 normally
+    // (since it's not used), and Site 0 should not be picked again.
+    const result = selectMeshSites(matrix3x5(), SITE_NAMES, chainEdges(), 1.0, {
+      requiredIndices: [0],
+    })
+    expect(result.selected).toContain(0)
+    expect(result.selected).toContain(1)
+    // No duplicates
+    expect(new Set(result.selected).size).toBe(result.selected.length)
+  })
+
+  it("handles empty requiredIndices array", () => {
+    const result = selectMeshSites(matrix3x5(), SITE_NAMES, chainEdges(), 0.8, {
+      requiredIndices: [],
+    })
+    // Should behave identically to no requiredIndices
+    const baseline = selectMeshSites(matrix3x5(), SITE_NAMES, chainEdges(), 0.8)
+    expect(result.selected).toEqual(baseline.selected)
+  })
+})

@@ -71,6 +71,10 @@ export function selectMeshSites(
     /** Per-cell weights for greedy scoring (length = matrix.nCells). When
      *  provided, the gain from covering a cell is its weight instead of 1. */
     cellWeights?: Float32Array
+    /** Indices that must always appear in the selected set.  These are
+     *  pre-seeded (marked used and their cells marked covered) before the
+     *  greedy loop runs, so they are always in the output. */
+    requiredIndices?: number[]
   },
 ): MeshSelectorResult {
   const start = performance.now()
@@ -94,7 +98,24 @@ export function selectMeshSites(
     adj.get(edge.targetIdx)!.add(edge.sourceIdx)
   }
 
-  // ── 2. Greedy selection ────────────────────────────────────────────────
+  // ── 2. Pre-seed required indices ────────────────────────────────────────
+  const req = opts?.requiredIndices
+  if (req) {
+    for (const i of req) {
+      if (i < 0 || i >= nSites || used[i]) continue
+      used[i] = 1
+      markCovered(matrix, i, covered, nCovered)
+      selected.push(i)
+      if (debug) {
+        console.log(
+          `[selector] required site ${_siteNames[i] ?? `Site ${i}`} ` +
+            `(covered=${nCovered.v}/${targetCells})`,
+        )
+      }
+    }
+  }
+
+  // ── 3. Greedy selection ────────────────────────────────────────────────
   while (nCovered.v < targetCells && selected.length < nSites) {
     let bestIdx = -1
     let bestScore = -Infinity
@@ -145,7 +166,7 @@ export function selectMeshSites(
     }
   }
 
-  // ── 3. MST via Kruskal's on selected subgraph ──────────────────────────
+  // ── 4. MST via Kruskal's on selected subgraph ──────────────────────────
   const uf = new UnionFind(nSites)
   const mstEdges: ConnectivityEdge[] = []
   const selSet = new Set(selected)
@@ -161,7 +182,7 @@ export function selectMeshSites(
     }
   }
 
-  // ── 4. Connected check ────────────────────────────────────────────────
+  // ── 5. Connected check ────────────────────────────────────────────────
   const connected = selected.length <= 1 || (() => {
     const root = uf.find(selected[0]!)
     for (let i = 1; i < selected.length; i++) {
