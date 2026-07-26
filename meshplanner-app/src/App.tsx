@@ -238,10 +238,6 @@ export default function App() {
         aria-label="Configuration panel"
         aria-modal={sidebarOpen ? "true" : undefined}
       >
-        <div className="sidebar-header">
-          <p className="app-subtitle">LoRa Site Planner</p>
-        </div>
-
         <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
         {activeTab === 'setup' && (
