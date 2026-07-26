@@ -252,7 +252,7 @@ export default function App() {
           {guidedMode ? <h3 id="step-mark-existing" style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Existing</h3> : <div className="section-label">Sites</div>}
           <SiteForm onAddSite={addSite} />
 
-          {guidedMode && <h3 id="step-set-area" style={{ margin: '12px 0 8px', fontSize: 13, fontWeight: 600 }}>Set Area</h3>}
+          {guidedMode && <h3 id="step-set-area" style={{ margin: '12px 0 8px', fontSize: 13, fontWeight: 600 }}>Set Disaster Area Limits</h3>}
           {/* Terrain overlay toggle */}
           <button
             type="button"
