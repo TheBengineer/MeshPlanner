@@ -34,6 +34,7 @@ export default function App() {
   } = useStore()
 
   const [tutorialOpen, setTutorialOpen] = useState(false)
+  const [advOpen, setAdvOpen] = useState(false)
 
   const placeCounter = useRef(0)
   const coordPlaceCounter = useRef(0)
@@ -164,7 +165,10 @@ export default function App() {
       {tutorialOpen && <TutorialOverlay onClose={() => setTutorialOpen(false)} />}
       {/* Top bar */}
       <div className="top-bar">
-        <h2 data-testid="app-title">MeshPlanner</h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          <h2 data-testid="app-title" style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-h)', lineHeight: 1.3 }}>MeshPlanner</h2>
+          <span style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.2 }}>LoRa Communications Planner for Disaster Relief</span>
+        </div>
         <div className="top-bar__actions">
           <button
             type="button"
@@ -253,50 +257,6 @@ export default function App() {
           <SiteForm onAddSite={addSite} />
 
           {guidedMode && <h3 id="step-disaster-limits" style={{ margin: '12px 0 8px', fontSize: 13, fontWeight: 600 }}>Disaster Area Limits</h3>}
-          {/* Terrain overlay toggle */}
-          <button
-            type="button"
-            data-testid="terrain-toggle"
-            onClick={() => setShowTerrain(!showTerrain)}
-            aria-pressed={showTerrain}
-            style={{
-              width: '100%',
-              marginTop: 6,
-              padding: '6px 10px',
-              fontSize: 12,
-              fontWeight: 600,
-              border: showTerrain ? '1px solid var(--accent)' : '1px solid var(--border)',
-              borderRadius: 4,
-              cursor: 'pointer',
-              background: showTerrain ? 'var(--accent)' : 'var(--bg)',
-              color: showTerrain ? '#fff' : 'var(--text-h)',
-            }}
-          >
-            {showTerrain ? 'Terrain On' : 'Show Terrain'}
-          </button>
-
-          {/* Building footprints toggle */}
-          <button
-            type="button"
-            data-testid="buildings-toggle"
-            onClick={() => setShowBuildings(!showBuildings)}
-            aria-pressed={showBuildings}
-            style={{
-              width: '100%',
-              marginTop: 6,
-              padding: '6px 10px',
-              fontSize: 12,
-              fontWeight: 600,
-              border: showBuildings ? '1px solid var(--accent)' : '1px solid var(--border)',
-              borderRadius: 4,
-              cursor: 'pointer',
-              background: showBuildings ? 'var(--accent)' : 'var(--bg)',
-              color: showBuildings ? '#fff' : 'var(--text-h)',
-            }}
-          >
-            {showBuildings ? 'Buildings On' : 'Show Buildings'}
-          </button>
-
           {/* Place button — toggles placing mode */}
           <button
             type="button"
@@ -381,6 +341,31 @@ export default function App() {
             useStore.setState({ params })
             if (kwargs) updateCoverageParams(kwargs)
           }} />
+          {(() => {
+            return (
+              <div style={{ borderTop: '1px solid var(--border)', marginTop: 8 }}>
+                <div role="button" tabIndex={0} onClick={() => setAdvOpen(!advOpen)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setAdvOpen(!advOpen) } }} aria-expanded={advOpen} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', userSelect: 'none', fontSize: 13, fontWeight: 600 }}>
+                  <span style={{ fontSize: 16 }}>⚙</span>
+                  <span>Advanced</span>
+                  <span style={{ marginLeft: 'auto', transition: 'transform 0.2s', transform: advOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} aria-hidden="true">▶</span>
+                </div>
+                {advOpen && (
+                  <div style={{ padding: '0 12px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <button type="button" onClick={() => setShowTerrain(!showTerrain)} aria-pressed={showTerrain} style={{ width: '100%', padding: '6px 10px', fontSize: 12, fontWeight: 600, border: showTerrain ? '1px solid var(--accent)' : '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', background: showTerrain ? 'var(--accent)' : 'var(--bg)', color: showTerrain ? '#fff' : 'var(--text-h)' }}>
+                      {showTerrain ? 'Terrain On' : 'Show Terrain'}
+                    </button>
+                    <button type="button" onClick={() => setShowBuildings(!showBuildings)} aria-pressed={showBuildings} style={{ width: '100%', padding: '6px 10px', fontSize: 12, fontWeight: 600, border: showBuildings ? '1px solid var(--accent)' : '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', background: showBuildings ? 'var(--accent)' : 'var(--bg)', color: showBuildings ? '#fff' : 'var(--text-h)' }}>
+                      {showBuildings ? 'Buildings On' : 'Show Buildings'}
+                    </button>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={useStore.getState().coverageParams.debugTerrain ?? false} onChange={e => useStore.getState().updateCoverageParams({ debugTerrain: e.target.checked })} aria-label="Debug terrain mode" />
+                      Debug Terrain
+                    </label>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </>
         )}
         {activeTab === 'results' && (

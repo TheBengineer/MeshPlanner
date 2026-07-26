@@ -846,10 +846,6 @@ export function ComputePanel() {
             {meshPlanButtonLabel}
           </button>
         )}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }} title="Show terrain elevation instead of signal strength">
-          <input type="checkbox" checked={coverageParams.debugTerrain ?? false} onChange={e => updateCoverageParams({ debugTerrain: e.target.checked })} aria-label="Debug terrain mode" />
-          Terrain
-        </label>
       </div>
 
       {/* ── Progress bar (DEM/coverage/combine) ── */}
