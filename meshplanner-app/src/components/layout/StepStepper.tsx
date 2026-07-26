@@ -5,7 +5,7 @@ interface StepStepperProps {
   onStepClick: (index: number) => void
 }
 
-const STEPS = ['Set Area', 'Existing', 'Required', 'Params']
+const STEPS = ['Disaster Area Limits', 'Existing and Required', 'Params']
 
 const containerStyle: React.CSSProperties = {
   display: 'flex',
