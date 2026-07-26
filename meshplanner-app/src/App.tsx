@@ -249,7 +249,7 @@ export default function App() {
           )}
           {guidedMode && <StepStepper currentStep={0} onStepClick={handleStepClick} />}
           <div className="sidebar-section sidebar-section--padded">
-          {guidedMode ? <h3 id="step-existing-required" style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Existing and Required Sites</h3> : <div className="section-label">Sites</div>}
+          {guidedMode ? <h3 id="step-existing-required" style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Existing and Required Sites</h3> : <div className="section-label">Existing and Required Sites</div>}
           <SiteForm onAddSite={addSite} />
 
           {guidedMode && <h3 id="step-disaster-limits" style={{ margin: '12px 0 8px', fontSize: 13, fontWeight: 600 }}>Disaster Area Limits</h3>}
