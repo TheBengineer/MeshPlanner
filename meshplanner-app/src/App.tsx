@@ -249,7 +249,7 @@ export default function App() {
           )}
           {guidedMode && <StepStepper currentStep={0} onStepClick={handleStepClick} />}
           <div className="sidebar-section sidebar-section--padded">
-          {guidedMode ? <h3 id="step-mark-existing" style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Mark Existing Sites</h3> : <div className="section-label">Sites</div>}
+          {guidedMode ? <h3 id="step-mark-existing" style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Existing</h3> : <div className="section-label">Sites</div>}
           <SiteForm onAddSite={addSite} />
 
           {guidedMode && <h3 id="step-set-area" style={{ margin: '12px 0 8px', fontSize: 13, fontWeight: 600 }}>Set Area</h3>}
@@ -347,7 +347,7 @@ export default function App() {
             {coordPlacing ? 'Placing coordination area…' : '➕ Add Coordination Area'}
           </button>
 
-          {guidedMode && <h3 id="step-mark-required" style={{ margin: '12px 0 8px', fontSize: 13, fontWeight: 600 }}>Mark Required Sites</h3>}
+          {guidedMode && <h3 id="step-mark-required" style={{ margin: '12px 0 8px', fontSize: 13, fontWeight: 600 }}>Required</h3>}
           <FileUpload onFile={handleFileUpload} label="Upload CSV/GeoJSON" />
           <CriticalInfraImport />
           <button type="button" onClick={() => useStore.getState().triggerCenterOnSite()} style={{ width: '100%', padding: '4px 8px', marginTop: 4, marginBottom: 4, fontSize: 12 }}>Center on site</button>
@@ -377,7 +377,7 @@ export default function App() {
 
         {activeTab === 'setup' && (
         <>
-          {guidedMode && <h3 id="step-configure-sim" style={{ margin: '8px 12px 0', fontSize: 13, fontWeight: 600 }}>Configure Sim</h3>}
+          {guidedMode && <h3 id="step-configure-sim" style={{ margin: '8px 12px 0', fontSize: 13, fontWeight: 600 }}>Params</h3>}
           <LoraParamsForm onParamsChange={(params, kwargs) => {
             useStore.setState({ params })
             if (kwargs) updateCoverageParams(kwargs)

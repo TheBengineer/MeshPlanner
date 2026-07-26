@@ -5,7 +5,7 @@ interface StepStepperProps {
   onStepClick: (index: number) => void
 }
 
-const STEPS = ['Set Area', 'Mark Existing Sites', 'Mark Required Sites', 'Configure Sim']
+const STEPS = ['Set Area', 'Existing', 'Required', 'Params']
 
 const containerStyle: React.CSSProperties = {
   display: 'flex',
