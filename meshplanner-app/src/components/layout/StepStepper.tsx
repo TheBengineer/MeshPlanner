@@ -5,7 +5,16 @@ interface StepStepperProps {
   onStepClick: (index: number) => void
 }
 
-const STEPS = ['Boundary', 'Sites', 'Params']
+interface StepDef {
+  label: string
+  sectionId: string
+}
+
+const STEPS: StepDef[] = [
+  { label: 'Boundary', sectionId: 'step-disaster-limits' },
+  { label: 'Sites', sectionId: 'step-existing-required' },
+  { label: 'Params', sectionId: 'step-params' },
+]
 
 const containerStyle: React.CSSProperties = {
   display: 'flex',
@@ -83,16 +92,16 @@ export function StepStepper({ currentStep, onStepClick }: StepStepperProps): Rea
 
   return (
     <div data-testid="step-stepper" style={containerStyle}>
-      {STEPS.map((label, i) => {
+      {STEPS.map((step, i) => {
         const isActive = i === currentStep
         const isCompleted = i < currentStep
 
         return (
-          <div key={label} style={stepGroupStyle}>
+          <div key={step.sectionId} style={stepGroupStyle}>
             <div
               role="button"
               tabIndex={0}
-              aria-label={`Step ${i + 1}: ${label}${isActive ? ' (current)' : ''}`}
+              aria-label={`Step ${i + 1}: ${step.label}${isActive ? ' (current)' : ''}`}
               aria-current={isActive ? 'step' : undefined}
               data-testid={`step-${i}`}
               onClick={() => onStepClick(i)}
@@ -103,7 +112,7 @@ export function StepStepper({ currentStep, onStepClick }: StepStepperProps): Rea
                 {isCompleted ? '✓' : i + 1}
               </div>
               <span style={labelStyle(isActive, isCompleted)}>
-                {`${i + 1}. ${label}`}
+                {`${i + 1}. ${step.label}`}
               </span>
             </div>
 

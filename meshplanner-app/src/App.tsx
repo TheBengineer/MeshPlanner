@@ -155,9 +155,12 @@ export default function App() {
   const closeSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen])
 
   const handleStepClick = useCallback((index: number) => {
-    const ids = ['step-area', 'step-mark-sites', 'step-import', 'step-configure']
+    const ids = ['step-disaster-limits', 'step-existing-required', 'step-params']
     const id = ids[index]
-    if (id) document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (id) {
+      const el = document.getElementById(id)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
   }, [])
 
   return (
